@@ -118,6 +118,15 @@ sound from working correctly. Upgrade to FFmpeg 8.1.3 or later.
 
 ## Troubleshooting
 
+If capture falls below the requested frame rate, try a USB port on a different
+host-controller path and avoid external hubs. A physically direct connection
+can still traverse an internal hub. On the tested Mac mini, moving the same
+Vita, cable and adapter from a front port to a rear port increased native
+video-only capture from about 52.15 to 57.45 FPS with the same plugin binary.
+This is not a universal port-performance guarantee; see the
+[USB ceiling measurements](docs/usb-ceiling-2026-09-19.md) for the topology,
+static/raw transfer tests and limitations.
+
 If the video looks glitched, try to change the video player configuration to use the *NV12* format or switch to another player (like PotPlayer or OBS). If the colors look wrong, set color range to full and color space to BT.601 (Rec. 601).
 
 If you use Windows 10 you might have to change the Camera access permissions on the Privacy Settings.

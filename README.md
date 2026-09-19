@@ -126,6 +126,8 @@ video-only capture from about 52.15 to 57.45 FPS with the same plugin binary.
 This is not a universal port-performance guarantee; see the
 [USB ceiling measurements](docs/usb-ceiling-2026-09-19.md) for the topology,
 static/raw transfer tests and limitations.
+The [firmware follow-up](docs/usb-firmware-2026-09-19.md) covers device-side
+request sizes, the verified DMA path, and the remaining controller unknowns.
 
 If the video looks glitched, try to change the video player configuration to use the *NV12* format or switch to another player (like PotPlayer or OBS). If the colors look wrong, set color range to full and color space to BT.601 (Rec. 601).
 

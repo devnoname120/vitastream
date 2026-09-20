@@ -1,6 +1,6 @@
 # USB transfer ceiling: front versus rear Mac mini port
 
-Date: 2026-09-19, Europe/Zurich.
+Date: 2026-09-19, Europe/Zurich. Embedded-sequence follow-up: 2026-09-20.
 Production baseline: release 1.9, commit
 `1cf3272b957a427394511d44c7aed36f35a89d31`.
 
@@ -26,8 +26,10 @@ USB DMA and allocation fallback remain unchanged.
 
 This is the best observed ceiling of the tested configurations, **not a proof
 of the maximum attainable by every Vita, host, firmware or controller setting**.
-The video-only result must not be generalized to every audio/video scheduling
-configuration; see the measurement caveat below.
+The result must not be generalized to every audio/video scheduling configuration.
+A follow-up on 2026-09-20 resolved the tested A/V callback discrepancy: the
+extra callbacks repeated frame sequences, while distinct delivery stayed near
+57.44 FPS. See the embedded-sequence results below.
 
 ## Conditions and topology
 
@@ -161,7 +163,7 @@ is only a consistency observation, not a count of actual transactions.
 Primary protocol reference: [Microchip, USB Frames](https://developerhelp.microchip.com/xwiki/bin/view/applications/usb/how-it-works/frame/).
 Host transfer API reference: [libusb asynchronous I/O](https://libusb.sourceforge.io/api-1.0/group__libusb__asyncio.html).
 
-## Audio/video check and unresolved callback-rate caveat
+## Initial audio/video check and callback-rate caveat
 
 With normal release 1.9 restored, a simultaneous LiveArea video/audio capture
 received correct 960x544 dimensions, changing image data and 721,920 stereo PCM
@@ -181,8 +183,9 @@ opened the temporary raw device but received no PCM, so the raw-plus-audio
 comparison was rejected. An updated Mac helper intended to read the embedded
 frame sequence did not reach capture: it hung in `freopen`/`open` while opening
 its log. No sequence results were produced. The cause of that host file-open
-stall was not established. Consequently, host repetition/retiming versus a
-possible change in transport behaviour with audio active remains unproven.
+stall was not established. Those attempts could not distinguish host
+repetition/retiming from a transport change. The successful follow-up below
+subsequently resolved that question for this test configuration.
 
 The diagnostic runner restored the original Mac tester on disk and the
 release-1.9 Vita plugin. The stalled helper (PID 29533, label
@@ -190,6 +193,68 @@ release-1.9 Vita plugin. The stalled helper (PID 29533, label
 exact command line, and a follow-up process check found it gone. The restored
 Mac application also passed `codesign --verify --deep --strict`. The failed
 sequence probe does not affect the completed video-only ceiling comparisons.
+
+## Embedded-sequence follow-up on 2026-09-20
+
+The previously authorized retry completed after FTP and VitaCompanion became
+reachable again. A separate copy of the Mac tester ran from its cache directory;
+the original application was not replaced. Its preflight captured changing
+release-1.9 LiveArea images at approximately 57.45 FPS before the temporary
+plugin was installed. `screen on` was acknowledged before every capture.
+
+The temporary static UVC sender increments a little-endian 32-bit value in the
+first four luma bytes for each submitted frame. The tester reads that value
+and checks the following 28 luma bytes against the fixed 0x55 pattern. It records
+monotonic callback-arrival time separately from presentation timestamps. Thus,
+repeated callbacks with the same sequence are not counted as new submissions,
+and mixed presentation-timestamp origins cannot inflate the rate.
+
+Three approximately 12-second sessions ran in order: video-only, simultaneous
+video/audio, then video-only again. Each result excludes its first two seconds.
+No sequence values were missing or out of order in any steady window; all
+sampled pattern checks passed.
+
+| Session | Steady seconds | Callbacks | Distinct sequences | Repeats | Distinct FPS | Distinct payload MB/s |
+|---|---:|---:|---:|---:|---:|---:|
+| Video-only | 9.957752 | 573 | 573 | 0 | 57.442684 | 44.998990 |
+| Simultaneous video/audio | 10.010432 | 600 | 576 | 24 | 57.440079 | 44.996949 |
+| Video-only after A/V | 10.010517 | 576 | 576 | 0 | 57.439591 | 44.996567 |
+
+Rates use distinct sequence transitions divided by the monotonic time between
+the first and last retained callback. Payload rates multiply those transitions
+by 783,372 bytes, including the frame header. They are not independent USB
+wire-byte counters. Raw logs were independently parsed to reproduce every
+count and rate rather than trusting the runner's JSON alone.
+
+**The near-60-FPS A/V callback rate is not additional USB throughput.** In the
+steady A/V window, 24 of 600 callbacks repeated an already delivered frame;
+there were still only about 57.44 distinct submitted frames per second.
+The repeats disappeared in the subsequent video-only session. This locates
+the apparent increase in the host-delivered callback stream, not a faster
+Vita sender; it does not identify the precise macOS component doing retiming.
+
+The sequence A/V session also received 577,536 stereo PCM frames at 48 kHz
+(12.032 seconds) and non-silent samples. After the guarded runner restored
+release 1.9 and rebooted, an ordinary LiveArea A/V check received changing
+960x544 images and 385,536 stereo PCM frames (8.032 seconds), again non-silent.
+All five sessions, including preflight and final live capture, reported correct
+dimensions and zero dropped host callbacks. Those callback counters do not
+exclude every possible device-level loss, and the final live callback rate is
+not presented as a distinct-frame measurement.
+
+The follow-up changes no production source, audio implementation, clocks,
+format, or buffering policy. Release 1.9 was independently read back afterward,
+matching the original 13,877-byte binary byte-for-byte. The taiHEN configuration
+and saved PSVshell profile matched their pre-test copies. The original Mac
+tester still passed signature verification. These remain short tests, not a
+long-run reliability, perceptual A/V synchronization, or game-overhead study.
+
+The runner, original results, per-callback logs, PNGs, and PCM are under
+`tests/.build/usb-firmware-review-20260919/`. The run prefix is
+`sequence-retry-20260920-221310`; its main `.json` and
+`-independent-verification.json` contain the completed restoration and
+independently recomputed results. The successful run supersedes the failed
+sequence attempts above without removing their historical evidence.
 
 ## Final production state and evidence
 

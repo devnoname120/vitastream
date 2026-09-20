@@ -1,6 +1,6 @@
 # USB firmware investigation after the rear-port ceiling test
 
-Date: 2026-09-19 (Europe/Paris).
+Date: 2026-09-19 (Europe/Paris). A/V sequence follow-up: 2026-09-20.
 
 Production baseline: release 1.9, code commit `1cf3272`. The documentation-only
 commit `8579a37` records the preceding ceiling experiments. This investigation
@@ -239,10 +239,12 @@ additional capture threads, and blind clock/reset changes. These are either
 already covered by negative controls, too small by measurement, incompatible
 with the intended USB protocol, or unsupported by decoded semantics.
 
-There remains an A/V-specific measurement question: a Mac capture session
-with audio can report nearly 60 video callbacks/s. The earlier evidence does
-not establish that those are distinct submitted USB frames. The sequence
-checker is the appropriate discriminator; callback timestamps alone are not.
+The A/V-specific callback question was resolved by the 2026-09-20 embedded-sequence
+retry: 600 steady-window A/V callbacks contained 576 distinct sequences and 24
+repeats, with no sequence gaps. Distinct delivery remained approximately
+57.44 FPS / 45.00 MB/s, as it did in the bracketing video-only sessions.
+See the [sequence results](usb-ceiling-2026-09-19.md#embedded-sequence-follow-up-on-2026-09-20).
+Callback timestamps alone must not be interpreted as distinct-frame throughput.
 
 ## 6. Final state and explicit limits
 
@@ -258,7 +260,7 @@ The taiHEN configuration and saved PSVshell profile matched their saved
 copies. The timed-out capture helper (PID 72869, with the exact request-sweep
 label) was terminated; no unrelated application was signalled.
 
-A sequence-check retry was prepared to use a separate Mac test-app copy and
+Initially, a sequence-check retry was prepared to use a separate Mac test-app copy and
 cache-directory output, leaving the original tester untouched. Its launch
 was blocked by the tool layer before execution. It did not install a plugin
 or produce another measurement. The script is retained as
@@ -266,10 +268,17 @@ or produce another measurement. The script is retained as
 No attempt was made to bypass the blocked launch or alter macOS permission
 databases.
 
+The user subsequently authorized retrying the check. After an initial network
+timeout, the same guarded runner completed on 2026-09-20 using its isolated
+cache-directory tester. Release 1.9 was restored and independently read back;
+the final live A/V capture had changing images and non-silent stereo samples.
+The successful results and exact method are linked above.
+
 The observed ceiling is approximately **45 MB/s under the tested video-only
 conditions**. Real native capture previously reached approximately 57.45 FPS
 on the same rear-port path, and steady 720p capture reached approximately
 29.97 FPS. No new production optimization or 60-distinct-FPS claim follows
-from this investigation. Unknown FIFO/turnaround semantics, the A/V callback
-ambiguity, different host controllers, and long-run/game-impact testing are
-not silently treated as solved.
+from this investigation. Unknown FIFO/turnaround semantics, different host
+controllers, and long-run/game-impact testing are not silently treated as
+solved. The A/V callback ambiguity is resolved for the tested configuration,
+not used to claim additional transport bandwidth.

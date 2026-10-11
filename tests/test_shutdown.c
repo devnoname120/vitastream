@@ -6,7 +6,7 @@
 
 #define SCE_KERNEL_STOP_FAIL (-1)
 #define SCE_KERNEL_STOP_SUCCESS 0
-#define UVC_DRIVER_NAME "VITAUVC00"
+#define UVC_DRIVER_NAME "vitastream"
 
 static atomic_int uvc_thread_run;
 static int uvc_driver_registered;

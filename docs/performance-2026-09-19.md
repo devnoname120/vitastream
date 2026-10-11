@@ -1,7 +1,10 @@
 # Video allocation and performance checks
 
 Date: 2026-09-19, Europe/Zurich. Baseline: `13ee8b7`, based on the
-`devnoname120/vita-udcd-uvc` main branch, not the experimental audio branch.
+`devnoname120/vitastream` main branch, not the experimental audio branch.
+
+The plugin was named `udcd_uvc.skprx` during these measurements; paths below
+record the tested installation.
 
 ## Change retained
 

@@ -322,16 +322,16 @@ struct SceUdcdInterface interface = {
 /* String descriptors */
 static
 struct SceUdcdStringDescriptor string_descriptor_product = {
-	14,
+	22,
 	USB_DT_STRING,
-	{'P', 'S', 'V', 'i', 't', 'a'}
+	{'v', 'i', 't', 'a', 's', 't', 'r', 'e', 'a', 'm'}
 };
 
 static
 struct SceUdcdStringDescriptor string_descriptor_serial = {
-	18,
+	22,
 	USB_DT_STRING,
-	{'U', 'D', 'C', 'D', ' ', 'U', 'V', 'C'}
+	{'v', 'i', 't', 'a', 's', 't', 'r', 'e', 'a', 'm'}
 };
 
 /* Hi-Speed device descriptor */

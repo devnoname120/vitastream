@@ -3,7 +3,7 @@
 
 #include "diagnostic.h"
 
-#define DIAGNOSTIC_FILE "ux0:data/udcd_uvc_diag.txt"
+#define DIAGNOSTIC_FILE "ux0:data/vitastream_diag.txt"
 
 static void diagnostic_write(const char *buffer, unsigned int length, int flags)
 {
@@ -20,7 +20,7 @@ static void diagnostic_write(const char *buffer, unsigned int length, int flags)
 
 void diagnostic_reset(void)
 {
-	static const char header[] = "udcd_uvc boot diagnostic\n";
+	static const char header[] = "vitastream boot diagnostic\n";
 
 	diagnostic_write(header, sizeof(header) - 1, SCE_O_TRUNC);
 }

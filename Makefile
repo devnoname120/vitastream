@@ -1,4 +1,4 @@
-TARGET	= udcd_uvc
+TARGET	= vitastream
 OBJS	= src/main.o src/audio.o src/video.o
 LIBS	= -lSceSysmemForDriver_stub -lSceThreadmgrForDriver_stub \
 	-lSceCpuForDriver_stub -lSceUdcdForDriver_stub \
@@ -61,7 +61,7 @@ clean:
 	@rm -rf $(TARGET).skprx $(TARGET).velf $(TARGET).elf $(OBJS) $(DEPS)
 
 send: $(TARGET).skprx
-	curl -T $(TARGET).skprx ftp://$(PSVITAIP):1337/ux0:/data/tai/kplugin.skprx
+	curl -q -T $(TARGET).skprx ftp://$(PSVITAIP):1337/ux0:/data/tai/kplugin.skprx
 	@echo "Sent."
 
 launch: send
@@ -69,7 +69,7 @@ launch: send
 	@echo "Launched!"
 
 taisend: $(TARGET).skprx
-	curl -T $(TARGET).skprx ftp://$(PSVITAIP):1337/ux0:/tai/$(TARGET).skprx
+	curl -q -T $(TARGET).skprx ftp://$(PSVITAIP):1337/ux0:/tai/$(TARGET).skprx
 	@echo "Sent."
 
 -include $(DEPS)

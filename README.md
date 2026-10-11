@@ -1,4 +1,9 @@
-# PSVita UDCD USB Video Class plugin + audio streaming support
+# vitastream
+
+USB video and audio streaming for PS Vita, based on
+[vita-udcd-uvc](https://github.com/xerpi/vita-udcd-uvc) by
+[Xerpi (Sergi Granell)](https://github.com/xerpi), who created the original
+USB video streaming plugin.
 
 ## What's this?
 
@@ -49,7 +54,10 @@ or the USB cable is disconnected.
 
 **Download**:
 
-* [udcd\_uvc.skprx](https://github.com/devnoname120/vita-udcd-uvc/releases)
+* [vitastream.skprx](https://github.com/devnoname120/vitastream/releases)
+
+Releases published before the rename contain `udcd_uvc.skprx`. Rename that
+downloaded file to `vitastream.skprx` to use the installation paths below.
 
 **Compilation**
 
@@ -103,13 +111,17 @@ They do not replace device tests of IFTU, USB timing, or simultaneous audio.
 
 **Installation**:
 
-1. Copy `udcd_uvc.skprx` to your PSVita
-2. Add `udcd_uvc.skprx` to taiHEN's config (`ur0:/tai/config.txt` or `ux0:/tai/config.txt`):
+1. Copy `vitastream.skprx` to your PSVita
+2. Add `vitastream.skprx` to taiHEN's config (`ur0:/tai/config.txt` or `ux0:/tai/config.txt`):
 ```
 *KERNEL
-ur0:tai/udcd_uvc.skprx
+ur0:tai/vitastream.skprx
 ```
 3. Reboot your PSVita.
+
+When upgrading from vita-udcd-uvc, replace its existing kernel plugin entry with
+`vitastream.skprx` so only one streaming plugin is loaded. New builds identify
+the USB video and audio device as `vitastream` on your computer.
 
 ## Listening to audio on macOS
 

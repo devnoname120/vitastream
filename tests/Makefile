@@ -5,11 +5,22 @@ BUILD_DIR ?= .build
 
 .PHONY: test clean
 
-test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/shutdown $(BUILD_DIR)/pacing
+test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/shutdown $(BUILD_DIR)/pacing $(BUILD_DIR)/firmware $(BUILD_DIR)/startup
 	$(BUILD_DIR)/video-double
 	$(BUILD_DIR)/video-single
 	$(BUILD_DIR)/shutdown
 	$(BUILD_DIR)/pacing
+	$(BUILD_DIR)/firmware
+	$(BUILD_DIR)/startup
+
+$(BUILD_DIR)/startup.inc: ../src/main.c extract_capture.py | $(BUILD_DIR)
+	python3 extract_capture.py --startup ../src/main.c $@
+
+$(BUILD_DIR)/startup: test_startup.c ../include/firmware_profiles.h $(BUILD_DIR)/startup.inc | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -Wno-unused-parameter -Istubs -I../include -I$(BUILD_DIR) test_startup.c -o $@
+
+$(BUILD_DIR)/firmware: test_firmware.c ../src/firmware.c ../include/firmware.h ../include/firmware_profiles.h $(wildcard stubs/*.h stubs/psp2kern/*.h stubs/psp2kern/kernel/*.h) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -Istubs -I../include test_firmware.c ../src/firmware.c -o $@
 
 $(BUILD_DIR):
 	mkdir -p $@

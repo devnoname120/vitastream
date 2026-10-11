@@ -12,6 +12,8 @@
 
 #include "audio.h"
 #include "diagnostic.h"
+#include "firmware.h"
+#include "firmware_profiles.h"
 #include "uac.h"
 
 #define ALIGN(value, alignment) \
@@ -25,7 +27,7 @@
 
 /*
  * SceAudio's normal SrcMix1 MAIN output writes the complete local mix to the
- * selected I2S sink. Firmware 3.60 initializes the handheld route to I2S7,
+ * selected I2S sink. The verified firmware initializes the handheld route to I2S7,
  * which is a final sink rather than one of the I2S0..2 capture/loopback ports.
  * Attempting to read I2S7's TX FIFO therefore arms DMA successfully but never
  * receives a peripheral request.
@@ -35,7 +37,7 @@
  * while its MAIN output continues feeding SrcMix1. Mirror that exact design one
  * stage later: enable SrcMix1 register 39 only after arming a FIFO-to-RAM DMAC4
  * chain, then drain SrcMix1 +0x240 using the adjacent request selector 0x60000.
- * The normal MAIN-to-I2S7 route remains untouched.
+ * The selected normal MAIN-to-I2S output route remains untouched.
  *
  * SrcMix0 secondary readback uses DMAC4 channel 4, the next mixer's input-1
  * channel. The corresponding SrcMix1 secondary path is channel 7 (SrcMix2
@@ -56,10 +58,10 @@
 	 SCE_KERNEL_DMAC_STAT_ERROR_ZERO_BYTE)
 
 /*
- * Runtime layout guards for the 3.60 SceAudio data segment. This project is
- * already firmware-specific, but checking the neighboring initialized tags
- * prevents an unknown SceAudio build from arming DMA against the wrong
- * peripheral.
+ * SceAudio's code and data geometry are identical in external 3.60-3.74 images.
+ * firmware_audio_data validates its loaded NID, code context and segment bounds
+ * before these offsets are used. The dynamic guards below also reject an
+ * incompatible route or another owner's active DMA operation.
  */
 #define SCE_AUDIO_SRCMIX1_MAIN_SOURCE_OFFSET	0xBAB4
 #define SCE_AUDIO_SRCMIX1_MAIN_DEST_OFFSET	0xBAB8
@@ -74,8 +76,6 @@
 
 #define SCE_AUDIO_SRCMIX1_MAIN_FIFO_PHYSICAL	0xE04B0200
 #define SCE_AUDIO_SRCMIX1_MAIN_DMAC_COMMAND	0x0005C000
-#define SCE_AUDIO_HANDHELD_I2S_INDEX		7
-#define SCE_AUDIO_HANDHELD_I2S_FIFO_PHYSICAL	0xE0490100
 #define SRCMIX1_SECONDARY_FIFO_PHYSICAL		((const void *)0xE04B0240)
 #define SRCMIX1_SECONDARY_DMAC_COMMAND		0x00060000
 #define SRCMIX1_SECONDARY_DMAC_CHANNEL		7
@@ -114,15 +114,12 @@
 #define AUDIO_DMA_TIMEOUT_US			500000
 
 /*
- * SceKernelDmacMgr 3.60 services the DMAC4 group interrupt on CPU 3. Keeping
+ * The verified SceKernelDmacMgr revisions service DMAC4 interrupts on CPU 3. Keeping
  * the capture worker on that CPU makes stop/unload serialize with the client
  * callback, which DmaOpQuit and DmaOpFree do not otherwise wait for.
  */
 #define AUDIO_CAPTURE_CPU_AFFINITY		0x00080000
 #define AUDIO_USB_CPU_AFFINITY			0x00010000
-
-int module_get_offset(SceUID pid, SceUID modid, int segment_index,
-		      size_t offset, uintptr_t *address);
 
 typedef int16_t AudioPcmFrame[UAC_CHANNEL_COUNT];
 
@@ -146,7 +143,7 @@ struct AudioDmaPeriod {
 
 /*
  * VitaSDK's public declaration omits the fifth argument and declares a void
- * return, while SceKernelDmacMgr 3.60 actually calls this ABI. Convert through
+ * return, while the verified SceKernelDmacMgr revisions call this ABI. Convert through
  * a union when registering it so the implementation can validate the real
  * byte count without an incompatible-function-pointer cast.
  */
@@ -270,7 +267,6 @@ static inline void audio_data_sync_barrier(void)
 
 static int audio_resolve_srcmix1_secondary(void)
 {
-	tai_module_info_t module_info;
 	volatile unsigned char *data_bytes;
 	volatile uint32_t *data;
 	volatile uint32_t *srcmix1_regs;
@@ -280,16 +276,8 @@ static int audio_resolve_srcmix1_secondary(void)
 	uint32_t secondary_control;
 	int ret;
 
-	memset(&module_info, 0, sizeof(module_info));
-	module_info.size = sizeof(module_info);
-	ret = taiGetModuleInfoForKernel(KERNEL_PID, "SceAudio", &module_info);
-	diagnostic_record("resolve SceAudio module", ret);
-	if (ret < 0)
-		return ret;
-
-	ret = module_get_offset(KERNEL_PID, module_info.modid, 1, 0,
-				&data_address);
-	diagnostic_record("resolve SceAudio data segment", ret);
+	ret = firmware_audio_data(&data_address);
+	diagnostic_record("validate SceAudio data segment", ret);
 	if (ret < 0)
 		return ret;
 	data = (volatile uint32_t *)data_address;
@@ -329,23 +317,21 @@ static int audio_resolve_srcmix1_secondary(void)
 		(int)secondary_control);
 
 	/*
-	 * The normal final route must still be SrcMix1 MAIN to I2S7. Refuse to
+	 * The normal final route must still be SrcMix1 MAIN to a selected I2S sink. Refuse to
 	 * collide with either firmware monitor mode, an already-enabled secondary
 	 * output, or SceAudio's private channel-7 operation.
 	 */
 	if (data[SCE_AUDIO_SRCMIX1_MAIN_SOURCE_OFFSET / sizeof(uint32_t)] !=
 		    SCE_AUDIO_SRCMIX1_MAIN_FIFO_PHYSICAL ||
-	    data[SCE_AUDIO_SRCMIX1_MAIN_DEST_OFFSET / sizeof(uint32_t)] !=
-		    SCE_AUDIO_HANDHELD_I2S_FIFO_PHYSICAL ||
+	    !firmware_audio_sink_matches(
+		data[SCE_AUDIO_SRCMIX1_MAIN_DEST_OFFSET / sizeof(uint32_t)],
+		data_bytes[SCE_AUDIO_SELECTED_I2S_INDEX_OFFSET],
+		data_bytes[SCE_AUDIO_I2S_ENABLED_MASK_OFFSET]) ||
 	    data[SCE_AUDIO_SRCMIX1_MAIN_COMMAND_OFFSET / sizeof(uint32_t)] !=
 		    SCE_AUDIO_SRCMIX1_MAIN_DMAC_COMMAND ||
 	    data_bytes[SCE_AUDIO_SRCMIX1_OUTPUT_MODE_OFFSET] != 0 ||
 	    data[SCE_AUDIO_SRCMIX2_INPUT1_STATE_OFFSET / sizeof(uint32_t)] != 0 ||
-	    secondary_control != SRCMIX_SECONDARY_CONTROL_DISABLED ||
-	    !(data_bytes[SCE_AUDIO_I2S_ENABLED_MASK_OFFSET] &
-	      (1u << SCE_AUDIO_HANDHELD_I2S_INDEX)) ||
-	    data_bytes[SCE_AUDIO_SELECTED_I2S_INDEX_OFFSET] !=
-		    SCE_AUDIO_HANDHELD_I2S_INDEX)
+	    secondary_control != SRCMIX_SECONDARY_CONTROL_DISABLED)
 		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
 
 	g_srcmix1_regs = srcmix1_regs;

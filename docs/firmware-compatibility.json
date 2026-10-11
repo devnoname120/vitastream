@@ -1,0 +1,1596 @@
+{
+  "verified": [
+    {
+      "hardware": "official",
+      "firmware": "3.60",
+      "modules": {
+        "udcd": {
+          "nid": "0x8E26B2A3",
+          "sha256": "83a1dac355590fcc23ee521742058778d2650d14389a80da3b4dcffd525938c0",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x0DA7714A",
+          "sha256": "c5e3e2c0fc468da994838ce9f72c5d9f8f942af4e725f4619acc56821f2b8b22",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xF926C804",
+          "sha256": "e996fcb4ce42b5e23879fe77992bfab705a1876135ea27ac522589d7a5a1051e",
+          "code_sha256": "63bda4bf27a6228f4e6b0139a0ee58cd4b663801439a33d485b4031672de6601",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.61",
+      "modules": {
+        "udcd": {
+          "nid": "0x2BE21912",
+          "sha256": "7fd00e9472108b3d4e319e8a686bd9021f5bef3c0c0b50ca7677d8c28e88d78f",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x5FA65AB0",
+          "sha256": "f739dc7cd9d72862a8384fad3bff02dcef8f7b7544eb0094da0a8c0818955341",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x978FC8D7",
+          "sha256": "deabcd53005da41596cd8f103e132d01342baa5045406e5990e75256ad304799",
+          "code_sha256": "63bda4bf27a6228f4e6b0139a0ee58cd4b663801439a33d485b4031672de6601",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.63",
+      "modules": {
+        "udcd": {
+          "nid": "0x98D172C4",
+          "sha256": "74e7d1fe68547f04010b2957fac170ec5949c92974f0935207a0955cd3230c9d",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xB18B03DE",
+          "sha256": "e887f9c3cf73d91f5fa6df514484ecc3b2713f7d096b07d6ff652185dabf254d",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x85C581FE",
+          "sha256": "f5221614daee98c4acde3fd928b5e5d2b2333a07c2b406c6e9b2c44533566fb2",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.65",
+      "modules": {
+        "udcd": {
+          "nid": "0xB0275A37",
+          "sha256": "09c33a7904853b4de6a190f36d8e0ae826c439ffd693b806dcd8630fdf06b994",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xBA583E43",
+          "sha256": "073656a67d2b700e4f19acedbb7eed59988f828bf7766aed4ab787d1ad7c1a24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x01A3B7B0",
+          "sha256": "cfe0dcadd98905af5dbfeca79476967c6b664eba10d613d85d1b17a9296c519f",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.67",
+      "modules": {
+        "udcd": {
+          "nid": "0xCD08069E",
+          "sha256": "e82f2cb32f6bc303a6b8ed14ae26b259e7da7a1f5ce15f9bba07f0f3b31daa3a",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xFE1A2BC1",
+          "sha256": "f0542246dc703b9b5c4b77d8d45cc9c04fa17b0d979778a05da38ed029aa4e24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x6B76C472",
+          "sha256": "47d2c6b04a85a19f789fe8936d72cc6358fa04ed55598e8996ebd19a8e6a5ca2",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.68",
+      "modules": {
+        "udcd": {
+          "nid": "0xBB62E35E",
+          "sha256": "4640464317906966d0018d9e5ae49179569a0b62f7f2b642b02e6430d22d513a",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x596C0CAA",
+          "sha256": "af8b4a2d3c8f99c5091f301d96ab88eeb292b9787d764ee3d69e3863a9b1810a",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x1FDCF223",
+          "sha256": "0ffef6d7231b17c2a4de9b114acc6cf4e8e86244fdea19a205468fd3f84644a6",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.69",
+      "modules": {
+        "udcd": {
+          "nid": "0xBFDD4BFD",
+          "sha256": "d9ae12dbb83473d5dd0d08eb983608584bcbb43aca17cea00515013530e2501a",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xCDD1D342",
+          "sha256": "ec5964a929735a421608c05fd8d59055f28a6dfb915f1a54935e5ca336199596",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xEC00B329",
+          "sha256": "656911356baa3484baab98089f720253567f0c2977022e4cb517284a5b326fbd",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.70",
+      "modules": {
+        "udcd": {
+          "nid": "0x9C6AA7D0",
+          "sha256": "e92de02dc89194f7cb4a8a1ae96af1ea6e8760a335ff720f375681d55530a9de",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x914AA642",
+          "sha256": "ee0834ec4a5f655d7e0e48e9dfb5153e92cea115c9e5ccc9ff2d1975204e8ae7",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xBF27A234",
+          "sha256": "41376740a5bbd58a55f1b79588ddbb8394d66783caa31d68c72624e44785a332",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.71",
+      "modules": {
+        "udcd": {
+          "nid": "0x3F5D04D9",
+          "sha256": "89dba03bccef50822a10f3d00d2aecdd12ab8c2e881333dd1202045171fbe34c",
+          "code_sha256": "2dd0724bbe9be84e359715ea8cf2003a539798f7d581f1277e8905d5dfb193df",
+          "text_size": 45332,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x9439ED79",
+          "sha256": "23082d4b5225a4d089dea458faf18a7282c900774c3fb3478cf4d4a6ad6b520f",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x0858DD9E",
+          "sha256": "ea553946cee8062f4577f925b8f00d694e175dfa5d86dd53b32aa44857f06436",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.72",
+      "modules": {
+        "udcd": {
+          "nid": "0x2B7A20EF",
+          "sha256": "7c5b6409263eaf0f5f8751801b05b86b589402cbaf7daceb555f77f1a7b26aca",
+          "code_sha256": "2dd0724bbe9be84e359715ea8cf2003a539798f7d581f1277e8905d5dfb193df",
+          "text_size": 45332,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xDEFAF2FB",
+          "sha256": "e13ecd30c1f958fd9d4155ffd70f028dcb270ddd394a10316ff45f0d5591bb9d",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xF5006200",
+          "sha256": "c98c8470e95b03061a61a8b8328763d79ae7c56e041edde33d653a1d899cb9f5",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.73",
+      "modules": {
+        "udcd": {
+          "nid": "0xBD25A100",
+          "sha256": "48d49c6894d9e5329e021cbdb348d0673ceea4cec85772ba840623f7dc204f8f",
+          "code_sha256": "2dd0724bbe9be84e359715ea8cf2003a539798f7d581f1277e8905d5dfb193df",
+          "text_size": 45332,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x0802F6F9",
+          "sha256": "2ae201b3946b77497872fbab03ac37242361a3939cffb6c8d5b25055861dcdae",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xC3261080",
+          "sha256": "accd9cde916454ca2fac463572f3d9f2cdd11d47ec6b290fa9211bb498d3f4b5",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "official",
+      "firmware": "3.74",
+      "modules": {
+        "udcd": {
+          "nid": "0x7C44A78B",
+          "sha256": "70ab26711af301550750a9ad03043a046b12492cfdef927b3a4af5276061a5db",
+          "code_sha256": "2dd0724bbe9be84e359715ea8cf2003a539798f7d581f1277e8905d5dfb193df",
+          "text_size": 45332,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x0BF11C75",
+          "sha256": "465f7201db85bd336bdd7fcf9a32ebbf15fa45319a9ac6fe404e78519cfcea2a",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x2D79F08D",
+          "sha256": "495d8b568da3a3b85981f01975ff1c75de1f59dad05cca344e17452177f246d6",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.60",
+      "modules": {
+        "udcd": {
+          "nid": "0x8E26B2A3",
+          "sha256": "83a1dac355590fcc23ee521742058778d2650d14389a80da3b4dcffd525938c0",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x0DA7714A",
+          "sha256": "c5e3e2c0fc468da994838ce9f72c5d9f8f942af4e725f4619acc56821f2b8b22",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xF926C804",
+          "sha256": "e996fcb4ce42b5e23879fe77992bfab705a1876135ea27ac522589d7a5a1051e",
+          "code_sha256": "63bda4bf27a6228f4e6b0139a0ee58cd4b663801439a33d485b4031672de6601",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.61",
+      "modules": {
+        "udcd": {
+          "nid": "0x2BE21912",
+          "sha256": "7fd00e9472108b3d4e319e8a686bd9021f5bef3c0c0b50ca7677d8c28e88d78f",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x5FA65AB0",
+          "sha256": "f739dc7cd9d72862a8384fad3bff02dcef8f7b7544eb0094da0a8c0818955341",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x978FC8D7",
+          "sha256": "deabcd53005da41596cd8f103e132d01342baa5045406e5990e75256ad304799",
+          "code_sha256": "63bda4bf27a6228f4e6b0139a0ee58cd4b663801439a33d485b4031672de6601",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.63",
+      "modules": {
+        "udcd": {
+          "nid": "0x98D172C4",
+          "sha256": "74e7d1fe68547f04010b2957fac170ec5949c92974f0935207a0955cd3230c9d",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xB18B03DE",
+          "sha256": "e887f9c3cf73d91f5fa6df514484ecc3b2713f7d096b07d6ff652185dabf254d",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x85C581FE",
+          "sha256": "f5221614daee98c4acde3fd928b5e5d2b2333a07c2b406c6e9b2c44533566fb2",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.65",
+      "modules": {
+        "udcd": {
+          "nid": "0xB0275A37",
+          "sha256": "09c33a7904853b4de6a190f36d8e0ae826c439ffd693b806dcd8630fdf06b994",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xBA583E43",
+          "sha256": "073656a67d2b700e4f19acedbb7eed59988f828bf7766aed4ab787d1ad7c1a24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x01A3B7B0",
+          "sha256": "cfe0dcadd98905af5dbfeca79476967c6b664eba10d613d85d1b17a9296c519f",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.67",
+      "modules": {
+        "udcd": {
+          "nid": "0xCD08069E",
+          "sha256": "e82f2cb32f6bc303a6b8ed14ae26b259e7da7a1f5ce15f9bba07f0f3b31daa3a",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xFE1A2BC1",
+          "sha256": "f0542246dc703b9b5c4b77d8d45cc9c04fa17b0d979778a05da38ed029aa4e24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x6B76C472",
+          "sha256": "47d2c6b04a85a19f789fe8936d72cc6358fa04ed55598e8996ebd19a8e6a5ca2",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.68",
+      "modules": {
+        "udcd": {
+          "nid": "0xBB62E35E",
+          "sha256": "4640464317906966d0018d9e5ae49179569a0b62f7f2b642b02e6430d22d513a",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x596C0CAA",
+          "sha256": "af8b4a2d3c8f99c5091f301d96ab88eeb292b9787d764ee3d69e3863a9b1810a",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x1FDCF223",
+          "sha256": "0ffef6d7231b17c2a4de9b114acc6cf4e8e86244fdea19a205468fd3f84644a6",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.70",
+      "modules": {
+        "udcd": {
+          "nid": "0x9C6AA7D0",
+          "sha256": "e92de02dc89194f7cb4a8a1ae96af1ea6e8760a335ff720f375681d55530a9de",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x914AA642",
+          "sha256": "ee0834ec4a5f655d7e0e48e9dfb5153e92cea115c9e5ccc9ff2d1975204e8ae7",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xBF27A234",
+          "sha256": "41376740a5bbd58a55f1b79588ddbb8394d66783caa31d68c72624e44785a332",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.72",
+      "modules": {
+        "udcd": {
+          "nid": "0x2B7A20EF",
+          "sha256": "7c5b6409263eaf0f5f8751801b05b86b589402cbaf7daceb555f77f1a7b26aca",
+          "code_sha256": "2dd0724bbe9be84e359715ea8cf2003a539798f7d581f1277e8905d5dfb193df",
+          "text_size": 45332,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xDEFAF2FB",
+          "sha256": "e13ecd30c1f958fd9d4155ffd70f028dcb270ddd394a10316ff45f0d5591bb9d",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xF5006200",
+          "sha256": "c98c8470e95b03061a61a8b8328763d79ae7c56e041edde33d653a1d899cb9f5",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.73",
+      "modules": {
+        "udcd": {
+          "nid": "0xBD25A100",
+          "sha256": "48d49c6894d9e5329e021cbdb348d0673ceea4cec85772ba840623f7dc204f8f",
+          "code_sha256": "2dd0724bbe9be84e359715ea8cf2003a539798f7d581f1277e8905d5dfb193df",
+          "text_size": 45332,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x0802F6F9",
+          "sha256": "2ae201b3946b77497872fbab03ac37242361a3939cffb6c8d5b25055861dcdae",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xC3261080",
+          "sha256": "accd9cde916454ca2fac463572f3d9f2cdd11d47ec6b290fa9211bb498d3f4b5",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.60",
+      "modules": {
+        "udcd": {
+          "nid": "0x8E26B2A3",
+          "sha256": "83a1dac355590fcc23ee521742058778d2650d14389a80da3b4dcffd525938c0",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x0DA7714A",
+          "sha256": "c5e3e2c0fc468da994838ce9f72c5d9f8f942af4e725f4619acc56821f2b8b22",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xF926C804",
+          "sha256": "e996fcb4ce42b5e23879fe77992bfab705a1876135ea27ac522589d7a5a1051e",
+          "code_sha256": "63bda4bf27a6228f4e6b0139a0ee58cd4b663801439a33d485b4031672de6601",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.61",
+      "modules": {
+        "udcd": {
+          "nid": "0x2BE21912",
+          "sha256": "7fd00e9472108b3d4e319e8a686bd9021f5bef3c0c0b50ca7677d8c28e88d78f",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x5FA65AB0",
+          "sha256": "f739dc7cd9d72862a8384fad3bff02dcef8f7b7544eb0094da0a8c0818955341",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x978FC8D7",
+          "sha256": "deabcd53005da41596cd8f103e132d01342baa5045406e5990e75256ad304799",
+          "code_sha256": "63bda4bf27a6228f4e6b0139a0ee58cd4b663801439a33d485b4031672de6601",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.63",
+      "modules": {
+        "udcd": {
+          "nid": "0x98D172C4",
+          "sha256": "74e7d1fe68547f04010b2957fac170ec5949c92974f0935207a0955cd3230c9d",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xB18B03DE",
+          "sha256": "e887f9c3cf73d91f5fa6df514484ecc3b2713f7d096b07d6ff652185dabf254d",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x85C581FE",
+          "sha256": "f5221614daee98c4acde3fd928b5e5d2b2333a07c2b406c6e9b2c44533566fb2",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.65",
+      "modules": {
+        "udcd": {
+          "nid": "0xB0275A37",
+          "sha256": "09c33a7904853b4de6a190f36d8e0ae826c439ffd693b806dcd8630fdf06b994",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xBA583E43",
+          "sha256": "073656a67d2b700e4f19acedbb7eed59988f828bf7766aed4ab787d1ad7c1a24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x01A3B7B0",
+          "sha256": "cfe0dcadd98905af5dbfeca79476967c6b664eba10d613d85d1b17a9296c519f",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.67",
+      "modules": {
+        "udcd": {
+          "nid": "0xCD08069E",
+          "sha256": "e82f2cb32f6bc303a6b8ed14ae26b259e7da7a1f5ce15f9bba07f0f3b31daa3a",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xFE1A2BC1",
+          "sha256": "f0542246dc703b9b5c4b77d8d45cc9c04fa17b0d979778a05da38ed029aa4e24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x6B76C472",
+          "sha256": "47d2c6b04a85a19f789fe8936d72cc6358fa04ed55598e8996ebd19a8e6a5ca2",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.68",
+      "modules": {
+        "udcd": {
+          "nid": "0xBB62E35E",
+          "sha256": "4640464317906966d0018d9e5ae49179569a0b62f7f2b642b02e6430d22d513a",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x596C0CAA",
+          "sha256": "af8b4a2d3c8f99c5091f301d96ab88eeb292b9787d764ee3d69e3863a9b1810a",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x1FDCF223",
+          "sha256": "0ffef6d7231b17c2a4de9b114acc6cf4e8e86244fdea19a205468fd3f84644a6",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.69",
+      "modules": {
+        "udcd": {
+          "nid": "0xBFDD4BFD",
+          "sha256": "d9ae12dbb83473d5dd0d08eb983608584bcbb43aca17cea00515013530e2501a",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xCDD1D342",
+          "sha256": "ec5964a929735a421608c05fd8d59055f28a6dfb915f1a54935e5ca336199596",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xEC00B329",
+          "sha256": "656911356baa3484baab98089f720253567f0c2977022e4cb517284a5b326fbd",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.70",
+      "modules": {
+        "udcd": {
+          "nid": "0x9C6AA7D0",
+          "sha256": "e92de02dc89194f7cb4a8a1ae96af1ea6e8760a335ff720f375681d55530a9de",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x914AA642",
+          "sha256": "ee0834ec4a5f655d7e0e48e9dfb5153e92cea115c9e5ccc9ff2d1975204e8ae7",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xBF27A234",
+          "sha256": "41376740a5bbd58a55f1b79588ddbb8394d66783caa31d68c72624e44785a332",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.71",
+      "modules": {
+        "udcd": {
+          "nid": "0x3F5D04D9",
+          "sha256": "89dba03bccef50822a10f3d00d2aecdd12ab8c2e881333dd1202045171fbe34c",
+          "code_sha256": "2dd0724bbe9be84e359715ea8cf2003a539798f7d581f1277e8905d5dfb193df",
+          "text_size": 45332,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x9439ED79",
+          "sha256": "23082d4b5225a4d089dea458faf18a7282c900774c3fb3478cf4d4a6ad6b520f",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x0858DD9E",
+          "sha256": "ea553946cee8062f4577f925b8f00d694e175dfa5d86dd53b32aa44857f06436",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.73",
+      "modules": {
+        "udcd": {
+          "nid": "0xBD25A100",
+          "sha256": "48d49c6894d9e5329e021cbdb348d0673ceea4cec85772ba840623f7dc204f8f",
+          "code_sha256": "2dd0724bbe9be84e359715ea8cf2003a539798f7d581f1277e8905d5dfb193df",
+          "text_size": 45332,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x0802F6F9",
+          "sha256": "2ae201b3946b77497872fbab03ac37242361a3939cffb6c8d5b25055861dcdae",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xC3261080",
+          "sha256": "accd9cde916454ca2fac463572f3d9f2cdd11d47ec6b290fa9211bb498d3f4b5",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false
+    }
+  ],
+  "unavailable": [
+    {
+      "hardware": "testkit",
+      "firmware": "3.69",
+      "missing_modules": [
+        "udcd",
+        "audio",
+        "dmacmgr"
+      ]
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.71",
+      "missing_modules": [
+        "udcd",
+        "audio",
+        "dmacmgr"
+      ]
+    },
+    {
+      "hardware": "testkit",
+      "firmware": "3.74",
+      "missing_modules": [
+        "udcd",
+        "audio",
+        "dmacmgr"
+      ]
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.72",
+      "missing_modules": [
+        "udcd",
+        "audio",
+        "dmacmgr"
+      ]
+    },
+    {
+      "hardware": "devkit",
+      "firmware": "3.74",
+      "missing_modules": [
+        "udcd",
+        "audio",
+        "dmacmgr"
+      ]
+    }
+  ],
+  "additional_tool_builds": [
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "3_600_011.I.cex_for_tool.release.type3.qaf",
+      "modules": {
+        "udcd": {
+          "nid": "0x8E26B2A3",
+          "sha256": "83a1dac355590fcc23ee521742058778d2650d14389a80da3b4dcffd525938c0",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x0DA7714A",
+          "sha256": "c5e3e2c0fc468da994838ce9f72c5d9f8f942af4e725f4619acc56821f2b8b22",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xF926C804",
+          "sha256": "b45ab0c893aa4b74efa56410b5c34efbcb552564a87ec0a6bbfebe7783ed49a3",
+          "code_sha256": "63bda4bf27a6228f4e6b0139a0ee58cd4b663801439a33d485b4031672de6601",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "3_600_011.I.cex_for_tool.release.type3.qaf"
+    },
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "3_630_011.I.devtool.release.type3.qaf",
+      "modules": {
+        "udcd": {
+          "nid": "0x98D172C4",
+          "sha256": "74e7d1fe68547f04010b2957fac170ec5949c92974f0935207a0955cd3230c9d",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xB18B03DE",
+          "sha256": "e887f9c3cf73d91f5fa6df514484ecc3b2713f7d096b07d6ff652185dabf254d",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x85C581FE",
+          "sha256": "401c0daea46704ac2a1176c047d6527fc2302875aaaa7e7f777fde13a0787300",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "3_630_011.I.devtool.release.type3.qaf"
+    },
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "3_650_000.I.cex_for_tool.release.type3.qaf",
+      "modules": {
+        "udcd": {
+          "nid": "0xF5586BE8",
+          "sha256": "f1ae37040e7c782296d9ffee10e2c41edc3319b13f1085ab96cc39a4d7dd0659",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0x0086EFAD",
+          "sha256": "427c479c9c1d66927b6b240be09bf9182dde8bee7dddbeb823381c1d31ba2ba2",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x9480785B",
+          "sha256": "d746a4acea5085916bffa7a2838a6ef72c6dd46783693946a39ee8310deed172",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "3_650_000.I.cex_for_tool.release.type3.qaf"
+    },
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "3_650_011.I.cex_for_tool.release.type3.qaf",
+      "modules": {
+        "udcd": {
+          "nid": "0xB0275A37",
+          "sha256": "09c33a7904853b4de6a190f36d8e0ae826c439ffd693b806dcd8630fdf06b994",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xBA583E43",
+          "sha256": "073656a67d2b700e4f19acedbb7eed59988f828bf7766aed4ab787d1ad7c1a24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x01A3B7B0",
+          "sha256": "b7c8dfd8bc9b54201d69ab7ee570b8fb5d196194155a99564103ed3a0a9151be",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "3_650_011.I.cex_for_tool.release.type3.qaf"
+    },
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "3_650_011.I.devtool.release.type3.qaf",
+      "modules": {
+        "udcd": {
+          "nid": "0xB0275A37",
+          "sha256": "09c33a7904853b4de6a190f36d8e0ae826c439ffd693b806dcd8630fdf06b994",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xBA583E43",
+          "sha256": "073656a67d2b700e4f19acedbb7eed59988f828bf7766aed4ab787d1ad7c1a24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x01A3B7B0",
+          "sha256": "b7c8dfd8bc9b54201d69ab7ee570b8fb5d196194155a99564103ed3a0a9151be",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "3_650_011.I.devtool.release.type3.qaf"
+    },
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "3_720_011.I.devtool.release.type3",
+      "modules": {
+        "udcd": {
+          "nid": "0x2B7A20EF",
+          "sha256": "7c5b6409263eaf0f5f8751801b05b86b589402cbaf7daceb555f77f1a7b26aca",
+          "code_sha256": "2dd0724bbe9be84e359715ea8cf2003a539798f7d581f1277e8905d5dfb193df",
+          "text_size": 45332,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xDEFAF2FB",
+          "sha256": "e13ecd30c1f958fd9d4155ffd70f028dcb270ddd394a10316ff45f0d5591bb9d",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0xF5006200",
+          "sha256": "5924bfed440553267ea944708260ac1626c1b12f06150ff9dd5e86447f5571c6",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "3_720_011.I.devtool.release.type3"
+    },
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "3_650._011.I.cex.release.type3.qaf",
+      "modules": {
+        "udcd": {
+          "nid": "0xB0275A37",
+          "sha256": "09c33a7904853b4de6a190f36d8e0ae826c439ffd693b806dcd8630fdf06b994",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xBA583E43",
+          "sha256": "073656a67d2b700e4f19acedbb7eed59988f828bf7766aed4ab787d1ad7c1a24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x01A3B7B0",
+          "sha256": "b7c8dfd8bc9b54201d69ab7ee570b8fb5d196194155a99564103ed3a0a9151be",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "3_650._011.I.cex.release.type3.qaf"
+    },
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "3_650._011.I.dex.release.type3.qaf",
+      "modules": {
+        "udcd": {
+          "nid": "0xB0275A37",
+          "sha256": "09c33a7904853b4de6a190f36d8e0ae826c439ffd693b806dcd8630fdf06b994",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xBA583E43",
+          "sha256": "073656a67d2b700e4f19acedbb7eed59988f828bf7766aed4ab787d1ad7c1a24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x01A3B7B0",
+          "sha256": "b7c8dfd8bc9b54201d69ab7ee570b8fb5d196194155a99564103ed3a0a9151be",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "3_650._011.I.dex.release.type3.qaf"
+    },
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "E.dex.release.type3.qaf",
+      "modules": {
+        "udcd": {
+          "nid": "0xB0275A37",
+          "sha256": "09c33a7904853b4de6a190f36d8e0ae826c439ffd693b806dcd8630fdf06b994",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xBA583E43",
+          "sha256": "073656a67d2b700e4f19acedbb7eed59988f828bf7766aed4ab787d1ad7c1a24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x01A3B7B0",
+          "sha256": "b7c8dfd8bc9b54201d69ab7ee570b8fb5d196194155a99564103ed3a0a9151be",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "E.dex.release.type3.qaf"
+    },
+    {
+      "hardware": "additional_tool_build",
+      "firmware": "E.dex.release.type3.qaf",
+      "modules": {
+        "udcd": {
+          "nid": "0xCD08069E",
+          "sha256": "e82f2cb32f6bc303a6b8ed14ae26b259e7da7a1f5ce15f9bba07f0f3b31daa3a",
+          "code_sha256": "7de9b5f54c6b3df19e3b00d6b1122be60cd35358bca22b11b8f8b7002cbfea33",
+          "text_size": 45316,
+          "data_size": 5984
+        },
+        "audio": {
+          "nid": "0xFE1A2BC1",
+          "sha256": "f0542246dc703b9b5c4b77d8d45cc9c04fa17b0d979778a05da38ed029aa4e24",
+          "code_sha256": "d6bd7839f6c414e302fa12e1399d62c489ea3180cdd8ade262e21bbab2ff1130",
+          "text_size": 53716,
+          "data_size": 48420
+        },
+        "dmacmgr": {
+          "nid": "0x6B76C472",
+          "sha256": "536d44e89a6cc126b100cc85be297afb3644e1aacab39cc2d26fce27b1e674e8",
+          "code_sha256": "f2438e6b1e422204839a5670e36cac00fd88836d3d262c8533dd7af3191e6441",
+          "text_size": 11444,
+          "data_size": 4768
+        }
+      },
+      "imports_verified": {
+        "debug-diagnostic": 77,
+        "debug": 76,
+        "default": 67,
+        "diagnostic": 71,
+        "lcd": 71,
+        "oled": 71,
+        "single": 67
+      },
+      "device_tested": false,
+      "source": "E.dex.release.type3.qaf"
+    }
+  ],
+  "source_sha256": {
+    "src/main.c": "993a8351518f23d9382e65594c6eb1223c6e7c6a319324f4db07858c6d0441d8",
+    "src/audio.c": "7163530ad8f6a1512836035e1f5c0cf486def1a65914c3d0c3bb892bde829ede",
+    "src/firmware.c": "01e5f73a1c4d805991d05eb7a4d1aba7b59ed48e78fa6a07031f1e617e628499",
+    "include/firmware.h": "7a988a5f72777aabccad4e73a775f7899260dbc64dbbb60725aacf55e3ced149",
+    "include/firmware_profiles.h": "8f53a5bd0bd47ef0ce572019732b4016fd4ede8f6a59dfe9a43836b6e45db7be"
+  },
+  "plugin_elf_sha256": {
+    "debug-diagnostic": "84363bde102fbaf01673e73ed4da1f393f770ccf13c83ce21819a18c1885a505",
+    "debug": "8f449aea0d44a57e3cbe2afadab3d28f459897a40490f3203704a0c89fff4815",
+    "default": "fccbca1331414c4d9db1fe2244138e67894a72a6228fa7a9f2e7a4867d7c5ab5",
+    "diagnostic": "c2d2776f498ceb265912d384a78ca948178abef7f0928932fd7c4a84f3300b58",
+    "lcd": "30472ccd677664cc9b30b57ba8c2c9e2b00efceca0ec07cd9169aab3897d1686",
+    "oled": "bfcb7a219e9e119360c36200725b93be421c25ad030ffccdf5e25b91490fa065",
+    "single": "76042466871f5984f991ea9ccea1b1df7c8341383643516899e3ebc3019c6d4a"
+  }
+}

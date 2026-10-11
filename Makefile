@@ -1,5 +1,5 @@
 TARGET	= vitastream
-OBJS	= src/main.o src/audio.o src/video.o
+OBJS	= src/main.o src/audio.o src/video.o src/firmware.o
 LIBS	= -lSceSysmemForDriver_stub -lSceThreadmgrForDriver_stub \
 	-lSceCpuForDriver_stub -lSceUdcdForDriver_stub \
 	-lSceDmacmgrForDriver_stub \

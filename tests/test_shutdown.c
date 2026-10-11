@@ -11,8 +11,8 @@
 static atomic_int uvc_thread_run;
 static int uvc_driver_registered;
 static SceUID uvc_thread_id = 20, uvc_event_flag_id = 21;
-static SceUID SceUdcd_sub_01E1128C_hook_uid = 22;
-static int SceUdcd_sub_01E1128C_ref, uvc_udcd_driver;
+static SceUID g_udcd_config_hook_uid = 22;
+static int g_udcd_config_hook_ref, uvc_udcd_driver;
 enum { AUDIO_STOP, JOIN, VIDEO_RELEASE, UNREGISTER, VIDEO_TERM, AUDIO_TERM };
 static struct {
 	int fail_at, registered, unregisters, event_deleted, thread_deleted, hook_released;
@@ -80,7 +80,7 @@ static int ksceKernelDeleteThread(SceUID id)
 }
 static int taiHookReleaseForKernel(SceUID id, int ref)
 {
-	assert(id == SceUdcd_sub_01E1128C_hook_uid && !state.registered);
+	assert(id == g_udcd_config_hook_uid && !state.registered);
 	state.hook_released++;
 	return 0;
 }
@@ -91,6 +91,7 @@ int main(void)
 {
 	for (int stage = AUDIO_TERM; stage >= -1; stage--) {
 		memset(&state, 0, sizeof(state));
+		g_udcd_config_hook_uid = 22;
 		uvc_thread_run = uvc_driver_registered = state.registered = 1;
 		state.fail_at = stage;
 		if (stage >= 0) {

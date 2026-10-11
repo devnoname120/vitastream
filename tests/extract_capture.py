@@ -9,10 +9,14 @@ mode = parser.add_mutually_exclusive_group()
 mode.add_argument("--shutdown", action="store_true")
 mode.add_argument("--pacing", action="store_true")
 mode.add_argument("--controls", action="store_true")
+mode.add_argument("--startup", action="store_true")
 args = parser.parse_args()
 text = args.source.read_text()
 prefix = ""
-if args.shutdown:
+if args.startup:
+    begin = "int module_start(SceSize argc, const void *args)\n{"
+    end = "int module_stop(SceSize argc, const void *args)\n{"
+elif args.shutdown:
     begin = "int module_stop(SceSize argc, const void *args)\n{"
     end = None
 elif args.pacing:

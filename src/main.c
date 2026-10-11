@@ -10,6 +10,8 @@
 #include <stdatomic.h>
 #include "audio.h"
 #include "diagnostic.h"
+#include "firmware.h"
+#include "firmware_profiles.h"
 #include "usb_descriptors.h"
 #include "uvc.h"
 #include "video.h"
@@ -833,22 +835,22 @@ int uvc_stop(void)
 	return 0;
 }
 
-static SceUID SceUdcd_sub_01E1128C_hook_uid = -1;
-static tai_hook_ref_t SceUdcd_sub_01E1128C_ref;
+static SceUID g_udcd_config_hook_uid = -1;
+static tai_hook_ref_t g_udcd_config_hook_ref;
 
-static int SceUdcd_sub_01E1128C_hook_func(const SceUdcdConfigDescriptor *config_descriptor, void *desc_data)
+static int uvc_serialize_config_hook(const SceUdcdConfigDescriptor *config_descriptor, void *desc_data)
 {
 	int ret;
 	SceUdcdConfigDescriptor *dst = desc_data;
 
-	ret = TAI_CONTINUE(int, SceUdcd_sub_01E1128C_ref, config_descriptor, desc_data);
+	ret = TAI_CONTINUE(int, g_udcd_config_hook_ref, config_descriptor, desc_data);
 
 	/*
 	 * SceUdcd doesn't use the extra and extraLength members of the
 	 * SceUdcdConfigDescriptor struct, so we have to manually patch
 	 * it to add custom descriptors.
 	 */
-	if (dst->wTotalLength == config_descriptor->wTotalLength) {
+	if (ret >= 0 && dst->wTotalLength == config_descriptor->wTotalLength) {
 		memmove(desc_data + USB_DT_CONFIG_SIZE + sizeof(interface_association_descriptor),
 			desc_data + USB_DT_CONFIG_SIZE,
 			config_descriptor->wTotalLength - USB_DT_CONFIG_SIZE);
@@ -869,10 +871,21 @@ void _start() __attribute__((weak, alias("module_start")));
 int module_start(SceSize argc, const void *args)
 {
 	int ret;
-	tai_module_info_t SceUdcd_modinfo;
+	SceUID udcd_modid;
 
 	diagnostic_reset();
 	diagnostic_record("module_start entered", 0);
+	ret = firmware_prepare(&udcd_modid);
+	diagnostic_record("firmware compatibility", ret);
+	if (ret < 0)
+		return SCE_KERNEL_START_NO_RESIDENT;
+
+	g_udcd_config_hook_uid = taiHookFunctionOffsetForKernel(KERNEL_PID,
+		&g_udcd_config_hook_ref, udcd_modid, 0,
+		FIRMWARE_UDCD_CONFIG_OFFSET, 1, uvc_serialize_config_hook);
+	diagnostic_record("install USB configuration hook", g_udcd_config_hook_uid);
+	if (g_udcd_config_hook_uid < 0)
+		return SCE_KERNEL_START_FAILED;
 
 #ifdef DEBUG
 	log_reset();
@@ -881,17 +894,6 @@ int module_start(SceSize argc, const void *args)
 #endif
 
 	LOG("vitastream (based on vita-udcd-uvc by Xerpi)\n");
-
-	SceUdcd_modinfo.size = sizeof(SceUdcd_modinfo);
-	ret = taiGetModuleInfoForKernel(KERNEL_PID, "SceUdcd",
-					&SceUdcd_modinfo);
-	diagnostic_record("taiGetModuleInfoForKernel SceUdcd", ret);
-
-	SceUdcd_sub_01E1128C_hook_uid = taiHookFunctionOffsetForKernel(KERNEL_PID,
-		&SceUdcd_sub_01E1128C_ref, SceUdcd_modinfo.modid, 0,
-		0x01E1128C - 0x01E10000, 1, SceUdcd_sub_01E1128C_hook_func);
-	diagnostic_record("taiHookFunctionOffsetForKernel",
-			  SceUdcd_sub_01E1128C_hook_uid);
 
 	uvc_thread_id = ksceKernelCreateThread("uvc_thread", uvc_thread,
 					       0x3C, 0x1000, 0, 0x10000, 0);
@@ -953,6 +955,8 @@ err_delete_event_flag:
 err_destroy_thread:
 	ksceKernelDeleteThread(uvc_thread_id);
 err_return:
+	taiHookReleaseForKernel(g_udcd_config_hook_uid, g_udcd_config_hook_ref);
+	g_udcd_config_hook_uid = -1;
 	return SCE_KERNEL_START_FAILED;
 }
 
@@ -988,9 +992,10 @@ int module_stop(SceSize argc, const void *args)
 	ksceKernelDeleteEventFlag(uvc_event_flag_id);
 	ksceKernelDeleteThread(uvc_thread_id);
 
-	if (SceUdcd_sub_01E1128C_hook_uid > 0) {
-		taiHookReleaseForKernel(SceUdcd_sub_01E1128C_hook_uid,
-			SceUdcd_sub_01E1128C_ref);
+	if (g_udcd_config_hook_uid >= 0) {
+		taiHookReleaseForKernel(g_udcd_config_hook_uid,
+			g_udcd_config_hook_ref);
+		g_udcd_config_hook_uid = -1;
 	}
 
 #ifdef DEBUG

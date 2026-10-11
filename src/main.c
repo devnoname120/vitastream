@@ -32,7 +32,7 @@
 #define ALIGN(x, a)			(((x) + ((a) - 1)) & ~((a) - 1))
 #define UNUSED(x)			((void)x)
 
-#define UVC_DRIVER_NAME			"VITAUVC00"
+#define UVC_DRIVER_NAME			"vitastream"
 #define UVC_USB_PID			0x1337
 
 #define MAX_UVC_VIDEO_FRAME_SIZE	VIDEO_FRAME_SIZE_NV12(1280, 720)
@@ -906,7 +906,7 @@ int uvc_start(void)
 	}
 
 	ret = ksceUdcdStart(UVC_DRIVER_NAME, 0, NULL);
-	diagnostic_record("start VITAUVC00", ret);
+	diagnostic_record("start " UVC_DRIVER_NAME, ret);
 	if (ret < 0) {
 		LOG("Error starting the " UVC_DRIVER_NAME " driver (0x%08X)\n", ret);
 		goto err_start_uvc_driver;
@@ -1010,7 +1010,7 @@ int module_start(SceSize argc, const void *args)
 	console_init();
 #endif
 
-	LOG("udcd_uvc by xerpi\n");
+	LOG("vitastream (based on vita-udcd-uvc by Xerpi)\n");
 
 	SceUdcd_modinfo.size = sizeof(SceUdcd_modinfo);
 	ret = taiGetModuleInfoForKernel(KERNEL_PID, "SceUdcd",
@@ -1047,7 +1047,7 @@ int module_start(SceSize argc, const void *args)
 	}
 
 	ret = ksceUdcdRegister(&uvc_udcd_driver);
-	diagnostic_record("ksceUdcdRegister VITAUVC00", ret);
+	diagnostic_record("ksceUdcdRegister " UVC_DRIVER_NAME, ret);
 	if (ret < 0) {
 		LOG("Error registering the UDCD driver (0x%08X)\n", ret);
 		goto err_audio_term;

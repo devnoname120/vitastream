@@ -6,6 +6,9 @@ Date: 2026-09-19, Europe/Zurich. Baseline: `13ee8b7`, based on the
 The plugin was named `udcd_uvc.skprx` during these measurements; paths below
 record the tested installation.
 
+These measurements predate the merge of the SourceMixer1 secondary audio path;
+they do not validate that audio implementation.
+
 ## Change retained
 
 `src/video.c` first tries the original `0x10208006` kernel allocation. Only

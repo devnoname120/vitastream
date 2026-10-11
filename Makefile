@@ -2,6 +2,7 @@ TARGET	= vitastream
 OBJS	= src/main.o src/audio.o src/video.o
 LIBS	= -lSceSysmemForDriver_stub -lSceThreadmgrForDriver_stub \
 	-lSceCpuForDriver_stub -lSceUdcdForDriver_stub \
+	-lSceDmacmgrForDriver_stub \
 	-lSceDisplayForDriver_stub -lSceIftuForDriver_stub \
 	-ltaihenForKernel_stub -ltaihenModuleUtils_stub \
 	-lSceSysclibForDriver_stub

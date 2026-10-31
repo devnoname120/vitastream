@@ -165,3 +165,11 @@ ports and unmapped sinks are rejected. Audio routed through another mixer or
 an active firmware monitor is not captured by this path.
 
 Note: Remember that if anything goes wrong (like PSVita not booting) you can always press L at boot to skip plugin loading.
+
+## License
+
+vitastream is licensed under the [GNU General Public License v3.0](LICENSE).
+
+## Projects using vitastream
+
+* [VitaDock++](https://github.com/Streety-1/VitaDockPlusPlus) turns a Raspberry Pi 5 into a TV dock for the PS Vita, using vitastream for USB video and audio.

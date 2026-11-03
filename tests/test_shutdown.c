@@ -13,7 +13,7 @@ static int uvc_driver_registered;
 static SceUID uvc_thread_id = 20, uvc_event_flag_id = 21;
 static SceUID g_udcd_config_hook_uid = 22;
 static int g_udcd_config_hook_ref, uvc_udcd_driver;
-enum { AUDIO_STOP, JOIN, VIDEO_RELEASE, UNREGISTER, VIDEO_TERM, AUDIO_TERM };
+enum { AUDIO_STOP, JOIN, SCREEN_RESTORE, VIDEO_RELEASE, UNREGISTER, VIDEO_TERM, AUDIO_TERM };
 static struct {
 	int fail_at, registered, unregisters, event_deleted, thread_deleted, hook_released;
 	int joined, released, video_dead, audio_dead;
@@ -22,6 +22,7 @@ static struct {
 static int result(int stage) { return state.fail_at == stage ? -77 : 0; }
 static void uac_audio_begin_shutdown(void) {}
 static int uac_audio_stop_sync(void) { return result(AUDIO_STOP); }
+static int vitastream_screen_restore(void) { assert(state.joined); return result(SCREEN_RESTORE); }
 static void uvc_handle_video_abort(void) {}
 int ksceKernelSetEventFlag(SceUID id, unsigned int bits)
 {
@@ -104,6 +105,6 @@ int main(void)
 		assert(state.unregisters == (stage == UNREGISTER ? 2 : 1));
 		assert(state.event_deleted == 1 && state.thread_deleted == 1 && state.hook_released == 1);
 	}
-	puts("shutdown: 7 failure/retry scenarios passed");
+	puts("shutdown: 8 failure/retry scenarios passed");
 	return 0;
 }

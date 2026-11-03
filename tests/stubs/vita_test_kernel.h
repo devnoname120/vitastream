@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 typedef int32_t SceUID;
+typedef int32_t SceInt32;
 typedef uint32_t SceSize;
 typedef uint32_t SceUInt32;
 typedef int32_t SceKernelMemBlockType;
@@ -54,6 +55,7 @@ SceUID ksceKernelCreateEventFlag(const char *name, unsigned int attr,
 	unsigned int bits, void *opt);
 int ksceKernelDeleteEventFlag(SceUID id);
 int ksceKernelSetEventFlag(SceUID id, unsigned int bits);
+int ksceKernelDelayThread(SceUInt32 microseconds);
 int ksceKernelWaitEventFlagCB(SceUID id, unsigned int bits,
 	unsigned int mode, unsigned int *out, SceUInt32 *timeout);
 SceUID ksceKernelAllocMemBlock(const char *name, SceKernelMemBlockType type,

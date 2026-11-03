@@ -1,22 +1,20 @@
 TARGET	= vitastream
-OBJS	= src/main.o src/audio.o src/video.o src/firmware.o
+OBJS	= src/main.o src/audio.o src/video.o src/firmware.o src/config.o src/settings.o src/audio_relay.o
 LIBS	= -lSceSysmemForDriver_stub -lSceThreadmgrForDriver_stub \
 	-lSceCpuForDriver_stub -lSceUdcdForDriver_stub \
 	-lSceDmacmgrForDriver_stub \
 	-lSceDisplayForDriver_stub -lSceIftuForDriver_stub \
 	-ltaihenForKernel_stub -ltaihenModuleUtils_stub \
-	-lSceSysclibForDriver_stub
+	-lSceSysclibForDriver_stub -lSceIofilemgrForDriver_stub
 
 ifeq ($(DEBUG), 1)
 	OBJS	+= debug/log.o debug/draw.o debug/console.o debug/font_data.o
 	CFLAGS	+= -DDEBUG -Idebug
-	LIBS	+= -lSceIofilemgrForDriver_stub
 endif
 
 ifeq ($(DIAGNOSTIC), 1)
 	OBJS	+= src/diagnostic.o
 	CFLAGS	+= -DDIAGNOSTIC
-	LIBS	+= -lSceIofilemgrForDriver_stub
 endif
 
 ifeq ($(PARALLEL), 0)

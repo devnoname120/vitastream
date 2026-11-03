@@ -1,4 +1,9 @@
-# Unreleased issue test build
+# Issue test build — 2026-10-14 (historical)
+
+This report describes the earlier pre-release candidate. Version 2.1 includes
+its full-mix audio and lifecycle changes, plus configurable local playback and
+screen control. See the [current configuration](../README.md#configuration) and
+[retail validation](retail-validation-2026-11-03.md) for the later implementation.
 
 This candidate addresses the four open issues reviewed on 2026-10-14. It is
 based on vitastream 2.0 (`d7836db7a57e606ed7008b8e0c848be8be5da0e5`), includes

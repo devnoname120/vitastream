@@ -16,6 +16,7 @@
 #include "usb_descriptors.h"
 #include "uvc.h"
 #include "video.h"
+#include "settings.h"
 
 #ifdef DEBUG
 
@@ -45,16 +46,6 @@
 /* Exported by the pinned SDK, but its older sysmem header omits this ABI. */
 int ksceKernelProcModeVAtoPA(SceUID pid, SceUInt32 permission,
 	const void *va, void **pa);
-
-int ksceOledDisplayOn();
-int ksceOledDisplayOff();
-int ksceOledGetBrightness();
-int ksceOledSetBrightness(int brightness);
-
-int ksceLcdDisplayOn();
-int ksceLcdDisplayOff();
-int ksceLcdGetBrightness();
-int ksceLcdSetBrightness(int brightness);
 
 /* Compatibility copy of the corrected SceIftuPlaneState definition. */
 typedef struct SceIftuPlaneState_updated {
@@ -109,9 +100,6 @@ static atomic_uint uvc_pacing_epoch;
 static atomic_int uvc_recover_pending;
 static int uvc_driver_registered;
 
-#if defined(DISPLAY_OFF_OLED) || defined(DISPLAY_OFF_LCD)
-static int prev_brightness;
-#endif
 
 static int usb_ep0_req_send(const void *data, unsigned int size)
 {
@@ -409,14 +397,6 @@ static int uvc_udcd_attach(int usb_version, void *user_data)
 	uac_audio_on_attach();
 	uvc_recover_pending = 0;
 
-#if defined(DISPLAY_OFF_OLED)
-	prev_brightness = ksceOledGetBrightness();
-	ksceOledDisplayOff();
-#elif defined(DISPLAY_OFF_LCD)
-	prev_brightness = ksceLcdGetBrightness();
-	ksceLcdDisplayOff();
-#endif
-
 	return 0;
 }
 
@@ -431,13 +411,6 @@ static void uvc_udcd_detach(void *user_data)
 		ksceKernelSetEventFlag(uvc_event_flag_id, 1);
 	}
 
-#if defined(DISPLAY_OFF_OLED)
-	ksceOledDisplayOn();
-	ksceOledSetBrightness(prev_brightness);
-#elif defined(DISPLAY_OFF_LCD)
-	ksceLcdDisplayOn();
-	ksceLcdSetBrightness(prev_brightness);
-#endif
 }
 
 static void uvc_udcd_configure(int usb_version, int desc_count, SceUdcdInterfaceSettings *settings, void *user_data)
@@ -798,6 +771,7 @@ static int uvc_thread(SceSize args, void *argp)
 {
 	SceUID display_vblank_cb_uid;
 	int start_result;
+	int video_progress = 0;
 #if 0
 	/*
 	 * Wait until the MTP driver starts to takeover.
@@ -818,6 +792,7 @@ static int uvc_thread(SceSize args, void *argp)
 #endif
 	if (!uvc_thread_run)
 		return 0;
+	vitastream_settings_load();
 	start_result = uvc_start();
 	diagnostic_record("uvc_start", start_result);
 	if (start_result < 0)
@@ -848,22 +823,37 @@ static int uvc_thread(SceSize args, void *argp)
 		if (!uvc_thread_run)
 			break;
 		if (!stream) {
+			video_progress = 0;
 			uvc_video_cancel();
 			uvc_video_release();
 		}
 		uvc_recover_usb();
+		uac_audio_diagnostic_state();
 		if (ret == 0 && stream) {
 			static int last_error;
 			ret = send_frame();
+			video_progress = ret >= 0;
 			if (ret < 0 && ret != last_error) {
 				LOG("Error processing NV12 frame: 0x%08X\n", ret);
 				diagnostic_record("NV12 frame capture error", ret);
 			}
 			last_error = ret;
 		} else if (ret == (int)0x80028005) {
+			video_progress = 0;
 			if (!stream)
 				uvc_video_cancel();
 			uvc_video_release();
+		}
+		/* A bulk host may stop reading without sending a clean UVC stop.
+		 * Release panel blanking after capture stalls instead of leaving
+		 * the handheld dark indefinitely on a retained request. */
+		{
+			static int last_screen_error;
+			int screen_ret = vitastream_screen_update(
+				(stream && video_progress) || uac_audio_is_active());
+			if (screen_ret < 0 && screen_ret != last_screen_error)
+				diagnostic_record("local display policy error", screen_ret);
+			last_screen_error = screen_ret;
 		}
 	}
 
@@ -930,6 +920,7 @@ restore_mtp:
 int uvc_stop(void)
 {
 	int ret;
+	int screen_ret = vitastream_screen_restore();
 
 	ret = uac_audio_stop_sync();
 	if (ret < 0)
@@ -947,7 +938,7 @@ int uvc_stop(void)
 	ksceUdcdStart("USB_MTP_Driver", 0, NULL);
 	ksceUdcdActivate(0x4E4);
 
-	return 0;
+	return screen_ret;
 }
 
 static SceUID g_udcd_config_hook_uid = -1;
@@ -1086,6 +1077,8 @@ int module_stop(SceSize argc, const void *args)
 
 	ksceKernelSetEventFlag(uvc_event_flag_id, 1);
 	if (ksceKernelWaitThreadEnd(uvc_thread_id, NULL, NULL) < 0)
+		return SCE_KERNEL_STOP_FAIL;
+	if (vitastream_screen_restore() < 0)
 		return SCE_KERNEL_STOP_FAIL;
 	if (uvc_video_release() < 0)
 		return SCE_KERNEL_STOP_FAIL;

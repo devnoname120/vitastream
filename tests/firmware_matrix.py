@@ -7,6 +7,7 @@ import argparse
 import ctypes
 import hashlib
 import json
+import re
 import struct
 import subprocess
 import tempfile
@@ -142,6 +143,20 @@ def runtime_audio_imports():
     return [(name, library, nid) for name, nid in definitions.items()]
 
 
+def runtime_panel_imports():
+    source = (REPO / 'src/settings.c').read_text()
+    result = []
+    for module, library, array in re.findall(
+            r'resolve_panel\("([^"]+)",\s*(0x[0-9A-Fa-f]+),\s*(\w+_nids)', source):
+        body = re.search(r'\b' + array + r'\[\]\s*=\s*\{([^}]+)\}', source)
+        assert body, (module, array)
+        nids = [int(value, 16) for value in re.findall(r'0x[0-9A-Fa-f]+', body.group(1))]
+        assert len(nids) == 4
+        result.extend((module, int(library, 16), nid) for nid in nids)
+    assert len(result) == 8, 'Update the dynamic panel export coverage'
+    return result
+
+
 def verify(kd, dll, builds, hardware, version):
     modules = {}
     exports = {}
@@ -192,9 +207,14 @@ def verify(kd, dll, builds, hardware, version):
     for name, library, function in dynamic:
         assert (library, function) in exports, (
             hardware, version, name, hex(library), hex(function))
+    panels = runtime_panel_imports()
+    for name, library, function in panels:
+        assert (library, function) in exports, (
+            hardware, version, name, hex(library), hex(function))
     return {'hardware': hardware, 'firmware': version, 'modules': modules,
             'imports_verified': imports_verified,
-            'runtime_audio_exports_verified': len(dynamic), 'device_tested': False}
+            'runtime_audio_exports_verified': len(dynamic),
+            'runtime_panel_exports_verified': len(panels), 'device_tested': False}
 
 
 def run(args, dll):
@@ -233,6 +253,8 @@ def run(args, dll):
                 record['source'], name, 'different tool executable code')
     source_hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest()
                      for name in ('src/main.c', 'src/audio.c', 'src/firmware.c',
+                                  'src/audio_relay.c', 'src/config.c', 'src/settings.c',
+                                  'include/audio_relay.h', 'include/config.h', 'include/settings.h',
                                   'include/firmware.h', 'include/firmware_profiles.h')}
     return {'verified': records, 'unavailable': unavailable,
             'additional_tool_builds': additional,

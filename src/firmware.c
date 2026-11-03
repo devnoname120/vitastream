@@ -81,3 +81,21 @@ int firmware_audio_data(uintptr_t *data_address)
 		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
 	return resolve_module(FIRMWARE_AUDIO, NULL, data_address);
 }
+
+int firmware_audio_output(uintptr_t address, struct firmware_audio_output *output)
+{
+	if (!output || !address || (address & 3u))
+		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
+	const volatile unsigned char *data = (const volatile unsigned char *)address;
+	unsigned int index = data[0xBD22];
+	unsigned int enabled = data[0xBD21];
+	/* SceAudio's normal output encoder uses these destination requests:
+	 * I2S4 -> 18, other mapped local sinks -> 20, in command bits 19..23.
+	 * Do not include SrcMix1's source-request bits in RAM-source playback. */
+	if (index < 3 || index >= 8 || !g_i2s_register_phys[index] ||
+	    !(enabled & (1u << index)))
+		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
+	output->fifo = g_i2s_register_phys[index] + 0x100u;
+	output->dma_request = index == 4 ? 0x00900000u : 0x00A00000u;
+	return 0;
+}

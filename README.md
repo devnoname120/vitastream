@@ -19,17 +19,21 @@ The [hardware color space converter](https://wiki.henkaku.xyz/vita/IFTU_Register
 controller directly performs a DMA transfer from the physical address of the resulting converted framebuffer, and therefore, saving CPU usage and power consumption.
 
 Audio is exposed to the computer as a USB Audio Class 1.0 capture/input device
-using 48 kHz, stereo, signed 16-bit PCM. The current test build uses SceAudio's
+using 48 kHz, stereo, signed 16-bit PCM. Version 2.1 uses SceAudio's
 firmware-owned monitor on SourceMixer1 MAIN, restoring the capture path used in
 1.9 for system, PSP and application audio. The firmware manages capture DMA
 and its completion fence. The tap precedes the codec's analog volume and mute
 settings. It does not capture the microphone.
 
-**Local speaker/headphone output is muted while USB audio capture is active.**
-Stopping USB audio restores the normal local route. This is a tradeoff of the
-restored full-mix path; 2.0's secondary-output tap missed audio in user reports.
-See the [unreleased issue test build](docs/issues-test.md) for the changes and
-the remaining device checks.
+By default, local speaker/headphone output is muted during USB audio capture.
+The new `speakers=on` option enables experimental DMA forwarding of the same
+captured PCM to the native local I2S sink, without changing the USB mix or
+reintroducing 2.0's incomplete secondary-output tap. Stopping capture fences
+the forwarding DMA before restoring Sony's normal output route. Simultaneous
+USB recording and local speaker playback have been confirmed on a retail 3.60
+Vita; other models, firmware and headphone routing still need device testing.
+See the [earlier issue investigation](docs/issues-test.md) for the source-specific
+audio reports and remaining application checks.
 The [retail verification report](docs/retail-validation-2026-11-03.md) records
 the confirmed 3.60 video/audio result and its testing limits.
 
@@ -74,7 +78,14 @@ coverage matrix and validation commands.
 
 **Download**:
 
-* [vitastream.skprx](https://github.com/devnoname120/vitastream/releases)
+* [Version 2.1 downloads](https://github.com/devnoname120/vitastream/releases/tag/v2.1)
+
+Use `vitastream.skprx` for normal operation and copy the supplied
+`vitastream.cfg` to `ur0:/tai/` to enable local playback during USB recording.
+`vitastream_diagnostic.skprx` adds logging for troubleshooting. Install only one
+plugin variant. The legacy `vitastream_oled_off.skprx` and
+`vitastream_lcd_off.skprx` default to screen off when no configuration file
+overrides that setting; the normal build supports `screen=off` on either panel.
 
 Releases published before the rename contain `udcd_uvc.skprx`. Rename that
 downloaded file to `vitastream.skprx` to use the installation paths below.
@@ -85,11 +96,20 @@ downloaded file to `vitastream.skprx` to use the installation paths below.
 
 ### Video pipeline
 
-The default build uses two dynamically sized conversion buffers. The existing
+The default source build uses two dynamically sized conversion buffers. The existing
 video worker can convert the next frame while the USB controller transmits the
 previous one; only one USB video request is queued at a time. A buffer is not
 reused or freed until its request completes, including after cancellation.
 All five video modes and the USB audio path are retained.
+
+The version 2.1 release downloads use `VIDEO_KERNEL_POOL=1`, the bounded
+single-buffer configuration tested on the retail Vita. This keeps video
+allocation outside the application's PhyCont pool and sacrifices conversion/
+transmission overlap. To reproduce all release variants with VitaSDK:
+
+```sh
+./gen_builds.sh builds/release
+```
 
 Video buffers use the kernel's physically contiguous, non-cacheable pool rather
 than consuming the ordinary kernel-driver pool needed during application startup.
@@ -138,6 +158,31 @@ and UndefinedBehaviorSanitizer. They exercise the production video transport,
 capture scheduling, source references, USB recovery, audio backend and shutdown
 path with simulated firmware/kernel/USB dependencies.
 They do not replace device tests of IFTU, USB timing, or simultaneous audio.
+
+### Configuration
+
+Copy [vitastream.cfg](vitastream.cfg) to `ur0:/tai/vitastream.cfg`:
+
+```ini
+screen=on
+speakers=on
+```
+
+- `screen=off` turns off the local OLED/LCD panel while the host captures video
+  and/or audio. USB video continues. The panel and saved brightness are restored
+  after capture stops or disconnects. `screen=on` leaves the panel alone.
+- `speakers=on` forwards captured PCM to the selected local output, so USB
+  recording and local speaker/headphone playback can run together. It uses a
+  private 4 KiB buffer, one PCM copy per block, and destination-paced DMA rather
+  than a software mixer or resampler. The retail 3.60 speaker path has been
+  tested; wider hardware and firmware validation remains experimental.
+  `speakers=off` retains the existing USB-only audio path.
+
+The file is read on plugin startup; reboot after editing it. `#` and `;` start
+comments. Keys and `on`/`off` values are case-insensitive. An absent or invalid
+file preserves the existing defaults: screen on, local forwarding off.
+The supplied file explicitly enables both options. The legacy OLED/LCD-off
+build flags remain supported as defaults when no configuration overrides them.
 
 **Installation**:
 

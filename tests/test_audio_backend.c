@@ -25,6 +25,8 @@ static struct {
 	int wake_calls, reset_calls, read_calls, drain_calls, pushed;
 	int fail_wait, fail_validate, fail_lookup, fail_mode, fail_rate, fail_channels;
 	int fail_read, fail_drain, fail_disable, stop_after_read;
+	int speakers_on, fail_relay_start, fail_relay_write, fail_relay_stop;
+	int relay_starts, relay_writes, relay_stops, relay_pending;
 	void *pending, *completed;
 } mock;
 
@@ -53,6 +55,24 @@ static void audio_ring_push(const AudioPcmFrame *frames, unsigned int count)
 	assert(count == 512 && frames[0][0] == 123 && frames[0][1] == -123);
 	mock.pushed++;
 }
+static int vitastream_settings_speakers_on(void) {return mock.speakers_on;}
+static int audio_relay_start(void)
+{
+	assert(!mock.mutex);
+	mock.relay_starts++; return mock.fail_relay_start ? -81 : 0;
+}
+static int audio_relay_write(const void *pcm, size_t bytes)
+{
+	assert(pcm == mock.completed && bytes == sizeof(memory.capture[0]) && mock.pushed);
+	mock.relay_writes++; mock.relay_pending = mock.fail_relay_write;
+	return mock.fail_relay_write ? -82 : 0;
+}
+static int audio_relay_stop(void)
+{
+	mock.relay_stops++;
+	if (mock.fail_relay_stop) return -83;
+	mock.relay_pending = 0; return 0;
+}
 static int mock_set_mode(int path, int mode);
 static int mock_set_rate(int rate);
 static int mock_set_channels(int channels);
@@ -66,6 +86,7 @@ static int mock_set_mode(int path, int mode)
 {
 	assert(path == AUDIO_MONITOR_PATH);
 	if (mode == AUDIO_MONITOR_MODE_DISABLED) {
+		assert(!mock.relay_pending);
 		mock.disable_calls++;
 		return mock.fail_disable ? -80 : 0;
 	}
@@ -120,6 +141,7 @@ static void reset(void)
 	g_audio_generation = 7;
 	g_audio_monitor_set_path_mode = NULL; g_audio_monitor_set_sample_rate = NULL;
 	g_audio_monitor_set_channel_mode = NULL; g_audio_monitor_read = NULL;
+	g_audio_relay_enabled = 0;
 }
 int main(void)
 {
@@ -153,6 +175,13 @@ int main(void)
 	reset(); assert(uac_audio_start() == 0);
 	assert(g_audio_desired && g_audio_generation == 8 && mock.reset_calls == 1 && mock.wake_calls == 2 && !mock.mutex);
 	assert(uac_audio_start() == 0 && mock.mode_calls == 1 && mock.lookup_calls == 4);
+	reset(); mock.speakers_on = 1; mock.fail_relay_start = 1;
+	assert(uac_audio_start() == 0 && !mock.relay_starts && mock.mode_calls == 1);
+	assert(audio_capture_run(8) == 0 && mock.relay_starts == 1 && !mock.read_calls && mock.disable_calls == 1 && !g_audio_desired);
+	reset(); mock.speakers_on = 1; mock.fail_rate = 1;
+	assert(uac_audio_start() == -75 && !mock.relay_starts && !g_audio_relay_enabled);
+	reset(); mock.speakers_on = 1;
+	assert(uac_audio_start() == 0 && !mock.relay_starts && g_audio_relay_enabled);
 
 	for (int failure = 0; failure < 5; failure++) {
 		reset(); g_audio_desired = 1; mock.stop_after_read = 3;
@@ -167,6 +196,16 @@ int main(void)
 		assert(g_capture_unsafe == (failure == 3));
 		assert(!mock.pending || failure == 3);
 	}
+	reset(); g_audio_desired = g_audio_relay_enabled = 1; mock.stop_after_read = 3;
+	g_audio_monitor_set_path_mode = mock_set_mode; g_audio_monitor_read = mock_monitor_read;
+	assert(audio_capture_run(7) == 0 && mock.relay_writes == 1 && mock.relay_stops == 1 && !g_audio_relay_enabled);
+	reset(); g_audio_desired = g_audio_relay_enabled = 1; mock.fail_relay_write = 1;
+	g_audio_monitor_set_path_mode = mock_set_mode; g_audio_monitor_read = mock_monitor_read;
+	assert(audio_capture_run(7) == 0 && mock.relay_writes == 1 && !mock.relay_pending && mock.disable_calls == 1);
+	reset(); g_audio_desired = g_audio_relay_enabled = 1; mock.fail_relay_write = mock.fail_relay_stop = 1;
+	g_audio_monitor_set_path_mode = mock_set_mode; g_audio_monitor_read = mock_monitor_read;
+	assert(audio_capture_run(7) == -83 && g_capture_unsafe && mock.relay_pending);
+	assert(!mock.disable_calls && !mock.drain_calls); /* never race the normal I2S writer */
 	puts("audio: full-mix export resolution, startup ordering/ownership, stop fences and failure cleanup passed");
 	return 0;
 }

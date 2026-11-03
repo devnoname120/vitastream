@@ -131,6 +131,30 @@ int main(void)
 	reset(0); text[1][0x7FD8] ^= 1; reject();
 	assert(!firmware_module_matches((enum FirmwareModule)99, 0, NULL, 0, 0));
 	assert(!firmware_context_matches(text[0], 8, (size_t)-1, text[0], 4));
+	for (unsigned int revision = 0; revision < 12; revision++) {
+		reset(revision);
+		assert(firmware_audio_data(&address) == 0);
+		for (unsigned int sink = 0; sink < 9; sink++) {
+			struct firmware_audio_output output = {123, 456};
+			data[1][0xBD22] = sink;
+			data[1][0xBD21] = 0xFF;
+			int valid = sink == 3 || sink == 4 || sink == 5 || sink == 7;
+			assert((firmware_audio_output(address, &output) == 0) == valid);
+			if (valid) {
+				assert(output.fifo == g_i2s_register_phys[sink] + 0x100u);
+				assert(output.dma_request == (sink == 4 ? 0x900000u : 0xA00000u));
+			} else assert(output.fifo == 123 && output.dma_request == 456);
+		}
+		data[1][0xBD22] = 7; data[1][0xBD21] = 0;
+		struct firmware_audio_output output;
+		assert(firmware_audio_output(address, &output) < 0);
+		data[1][0xBD21] = 0x80; nids[1] = 0;
+		assert(firmware_audio_data(&address) < 0);
+	}
+	struct firmware_audio_output output;
+	assert(firmware_audio_output(0, &output) < 0);
+	assert(firmware_audio_output(1, &output) < 0);
+	assert(firmware_audio_output((uintptr_t)data[1], NULL) < 0);
 	puts("firmware: 12 revisions and lookup, bounds, identity, context, ABI failure scenarios passed");
 	return 0;
 }

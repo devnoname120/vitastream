@@ -11,6 +11,8 @@
 #include "diagnostic.h"
 #include "firmware.h"
 #include "uac.h"
+#include "settings.h"
+#include "audio_relay.h"
 
 #define ALIGN(value, alignment) \
 	(((value) + ((alignment) - 1)) & ~((alignment) - 1))
@@ -20,6 +22,9 @@
 #define AUDIO_MONITOR_MODE_READBACK		2
 #define AUDIO_MONITOR_STEREO			2
 #define AUDIO_CAPTURE_FRAMES			512
+/* Retain the working capture affinity. The relay has no plugin callback;
+ * its public completion wait and stop fence own the DMA-buffer lifetime. */
+#define AUDIO_CAPTURE_CPU_AFFINITY		0x00010000
 
 #define AUDIO_RING_FRAMES			8192
 #define AUDIO_RING_MASK				(AUDIO_RING_FRAMES - 1)
@@ -80,6 +85,9 @@ static AudioMonitorSetPathModeFn g_audio_monitor_set_path_mode;
 static AudioMonitorSetSampleRateFn g_audio_monitor_set_sample_rate;
 static AudioMonitorSetChannelModeFn g_audio_monitor_set_channel_mode;
 static AudioMonitorReadFn g_audio_monitor_read;
+static int g_audio_relay_enabled;
+static SceInt32 g_audio_start_calls, g_audio_start_result;
+static SceInt32 g_audio_capture_phase, g_audio_relay_result;
 
 #define AUDIO_SRCMIX0_MODE_OFFSET 0xB9BCu
 #define AUDIO_SRCMIX1_MODE_OFFSET 0xBB28u
@@ -506,14 +514,42 @@ static int audio_capture_run(unsigned int generation)
 {
 	unsigned int current = 0;
 	int ret;
+	ksceKernelAtomicSet32(&g_audio_capture_phase, 2);
+	/* USB alternate-setting callbacks may not allocate kernel DMA objects.
+	 * Prepare the forwarding resources here, before the first capture. */
+	if (g_audio_relay_enabled) {
+		ret = audio_relay_start();
+		ksceKernelAtomicSet32(&g_audio_relay_result, ret);
+		ksceKernelAtomicSet32(&g_audio_capture_phase, 3);
+		diagnostic_record("prepare local audio DMA on worker", ret);
+		if (ret < 0) {
+			int stop_ret = audio_relay_stop();
+			audio_signal_failure();
+			if (stop_ret < 0) {
+				ksceKernelAtomicSet32(&g_capture_unsafe, 1);
+				return stop_ret;
+			}
+			g_audio_relay_enabled = 0;
+			return g_audio_monitor_set_path_mode(
+				AUDIO_MONITOR_PATH, AUDIO_MONITOR_MODE_DISABLED);
+		}
+	}
 
 	ksceKernelDcacheInvalidateRange(
 		g_audio_memory->capture[current],
 		sizeof(g_audio_memory->capture[current]));
 	ret = g_audio_monitor_read(AUDIO_MONITOR_PATH,
 		g_audio_memory->capture[current], AUDIO_CAPTURE_FRAMES);
+	ksceKernelAtomicSet32(&g_audio_capture_phase, 4);
 	diagnostic_record("initial audio monitor read", ret);
 	if (ret < 0) {
+		int relay_ret = audio_relay_stop();
+		if (relay_ret < 0) {
+			ksceKernelAtomicSet32(&g_capture_unsafe, 1);
+			audio_signal_failure();
+			return relay_ret;
+		}
+		g_audio_relay_enabled = 0;
 		int mode_ret = g_audio_monitor_set_path_mode(
 			AUDIO_MONITOR_PATH, AUDIO_MONITOR_MODE_DISABLED);
 		diagnostic_record("disable audio monitor path", mode_ret);
@@ -547,10 +583,30 @@ static int audio_capture_run(unsigned int generation)
 		if (ksceKernelAtomicGetAndAdd32(&g_audio_desired, 0) &&
 		    generation == (unsigned int)ksceKernelAtomicGetAndAdd32(
 			    &g_audio_generation, 0))
+		{
 			audio_ring_push(g_audio_memory->capture[current],
 					AUDIO_CAPTURE_FRAMES);
+			if (g_audio_relay_enabled) {
+				ret = audio_relay_write(g_audio_memory->capture[current],
+					sizeof(g_audio_memory->capture[current]));
+				if (ret < 0) {
+					diagnostic_record("local audio DMA transfer failed", ret);
+					audio_signal_failure();
+					break;
+				}
+			}
+		}
 		current = next;
 	}
+
+	/* Do not restore Sony's normal I2S writer until our writer is fenced. */
+	ret = audio_relay_stop();
+	if (ret < 0) {
+		ksceKernelAtomicSet32(&g_capture_unsafe, 1);
+		audio_signal_failure();
+		return ret;
+	}
+	g_audio_relay_enabled = 0;
 
 	/*
 	 * Wait for the last queued monitor destination to be released, without
@@ -584,6 +640,7 @@ static int audio_capture_run(unsigned int generation)
 
 static int audio_capture_thread(SceSize args, void *argp)
 {
+	ksceKernelAtomicSet32(&g_audio_capture_phase, 1);
 	(void)args;
 	(void)argp;
 
@@ -742,7 +799,7 @@ int uac_audio_init(SceUdcdEndpoint *endpoint)
 	}
 
 	g_capture_thread_id = ksceKernelCreateThread("uac_capture_thread",
-		audio_capture_thread, 0x3A, 0x2000, 0, 0x10000, NULL);
+		audio_capture_thread, 0x3A, 0x2000, 0, AUDIO_CAPTURE_CPU_AFFINITY, NULL);
 	if (g_capture_thread_id < 0) {
 		ret = g_capture_thread_id;
 		goto fail_state_event;
@@ -812,6 +869,7 @@ int uac_audio_start(void)
 {
 	unsigned int ignored;
 	int ret;
+	ksceKernelAtomicAddAndGet32(&g_audio_start_calls, 1);
 
 	if (!ksceKernelAtomicGetAndAdd32(&g_audio_initialized, 0))
 		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
@@ -839,6 +897,7 @@ int uac_audio_start(void)
 	ret = audio_resolve_monitor_functions();
 	if (ret < 0)
 		goto out;
+	g_audio_relay_enabled = vitastream_settings_speakers_on();
 
 	/*
 	 * The rate/channel setters only select the monitor format. SceAudio's
@@ -849,7 +908,7 @@ int uac_audio_start(void)
 		AUDIO_MONITOR_PATH, AUDIO_MONITOR_MODE_READBACK);
 	diagnostic_record("enable audio monitor path", ret);
 	if (ret < 0)
-		goto out;
+		goto stop_relay;
 
 	ret = g_audio_monitor_set_sample_rate(UAC_SAMPLE_RATE);
 	diagnostic_record("set audio monitor rate", ret);
@@ -876,7 +935,10 @@ int uac_audio_start(void)
 disable_monitor_path:
 	(void)g_audio_monitor_set_path_mode(
 		AUDIO_MONITOR_PATH, AUDIO_MONITOR_MODE_DISABLED);
+stop_relay:
+	g_audio_relay_enabled = 0;
 out:
+	ksceKernelAtomicSet32(&g_audio_start_result, ret);
 	ksceKernelUnlockFastMutex(&g_audio_state_mutex);
 	return ret;
 }
@@ -889,6 +951,36 @@ void uac_audio_request_stop(void)
 	ksceKernelLockFastMutex(&g_audio_state_mutex);
 	audio_request_stop_locked();
 	ksceKernelUnlockFastMutex(&g_audio_state_mutex);
+}
+
+int uac_audio_is_active(void)
+{
+	return ksceKernelAtomicGetAndAdd32(&g_audio_desired, 0) != 0;
+}
+
+void uac_audio_diagnostic_state(void)
+{
+#ifdef DIAGNOSTIC
+	static int previous[6] = {-1, -1, -1, -1, -1, -1};
+	int now[] = {
+		ksceKernelAtomicGetAndAdd32(&g_audio_start_calls, 0),
+		ksceKernelAtomicGetAndAdd32(&g_audio_start_result, 0),
+		ksceKernelAtomicGetAndAdd32(&g_audio_capture_phase, 0),
+		ksceKernelAtomicGetAndAdd32(&g_audio_relay_result, 0),
+		ksceKernelAtomicGetAndAdd32(&g_audio_desired, 0),
+		ksceKernelAtomicGetAndAdd32(&g_audio_generation, 0)
+	};
+	if (!memcmp(previous, now, sizeof(now)))
+		return;
+	memcpy(previous, now, sizeof(now));
+	diagnostic_record("audio starts", now[0]);
+	diagnostic_record("audio start result", now[1]);
+	diagnostic_record("audio capture worker phase", now[2]);
+	diagnostic_record("audio relay worker result", now[3]);
+	diagnostic_record("audio desired", now[4]);
+	diagnostic_record("audio generation", now[5]);
+	diagnostic_record("audio USB in-flight", ksceKernelAtomicGetAndAdd32(&g_usb_in_flight, 0));
+#endif
 }
 
 int uac_audio_stop_sync(void)
@@ -947,6 +1039,9 @@ int uac_audio_term(void)
 
 	uac_audio_begin_shutdown();
 	ret = uac_audio_stop_sync();
+	if (ret < 0)
+		return ret;
+	ret = audio_relay_stop();
 	if (ret < 0)
 		return ret;
 

@@ -17,7 +17,7 @@ struct panel_api {
 	int (*set_brightness)(int value);
 };
 
-static struct vitastream_config config = {1, 0};
+static struct vitastream_config config = {1, 1};
 static struct panel_api panel;
 static int panel_resolved;
 static int panel_owned;
@@ -57,6 +57,32 @@ static int resolve_active_panel(void)
 	return 0;
 }
 
+static void create_default_config(void)
+{
+	static const char text[] = "screen=on\nspeakers=on\n";
+	size_t length = sizeof(text) - 1, written = 0;
+	/* An unsuccessful read must never truncate an existing configuration,
+	 * including one created between the read and this exclusive open. */
+	SceUID fd = ksceIoOpen(VITASTREAM_CONFIG_PATH,
+		SCE_O_WRONLY | SCE_O_CREAT | SCE_O_EXCL, 0666);
+	if (fd < 0) {
+		diagnostic_record("create default vitastream.cfg", fd);
+		return;
+	}
+	int ret = 0;
+	while (written < length) {
+		ret = ksceIoWrite(fd, text + written, length - written);
+		if (ret <= 0) {
+			if (!ret)
+				ret = -1;
+			break;
+		}
+		written += (size_t)ret;
+	}
+	int close_ret = ksceIoClose(fd);
+	diagnostic_record("create default vitastream.cfg", ret < 0 ? ret : close_ret);
+}
+
 void vitastream_settings_load(void)
 {
 	static char text[VITASTREAM_CONFIG_MAX_SIZE + 1];
@@ -72,6 +98,8 @@ void vitastream_settings_load(void)
 			config = parsed;
 		else
 			diagnostic_record("invalid vitastream.cfg; using defaults", ret < 0 ? ret : -1);
+	} else {
+		create_default_config();
 	}
 	diagnostic_record("config screen on", config.screen_on);
 	diagnostic_record("config local speakers on", config.speakers_on);

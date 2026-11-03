@@ -21,10 +21,7 @@ static int equal(const char *text, size_t length, const char *word)
 void vitastream_config_defaults(struct vitastream_config *config)
 {
 	config->screen_on = 1;
-	config->speakers_on = 0;
-#if defined(DISPLAY_OFF_OLED) || defined(DISPLAY_OFF_LCD)
-	config->screen_on = 0;
-#endif
+	config->speakers_on = 1;
 }
 
 int vitastream_config_parse(const char *text, size_t length,

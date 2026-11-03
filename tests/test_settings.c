@@ -12,13 +12,31 @@ static struct {
 	int oled, lcd, fail_lookup, fail_read, fail_on, fail_off, fail_brightness;
 	int opens, reads, closes, on, off, get_brightness, set_brightness;
 	int brightness_busy, delays;
+	int fail_open, fail_create, fail_write, zero_write, write_limit;
+	int creates, writes, create_closes;
+	const char *race_text;
+	char created[128];
+	size_t written;
 } mock;
 
 SceUID ksceIoOpen(const char *path, int flags, int mode)
 {
-	assert(!strcmp(path, VITASTREAM_CONFIG_PATH) && flags == SCE_O_RDONLY && mode == 0);
+	assert(!strcmp(path, VITASTREAM_CONFIG_PATH));
 	mock.opens++;
-	return mock.text ? 7 : -2;
+	if (flags == SCE_O_RDONLY) {
+		assert(mode == 0);
+		return mock.fail_open ? -78 : mock.text ? 7 : -2;
+	}
+	assert(flags == (SCE_O_WRONLY | SCE_O_CREAT | SCE_O_EXCL) && mode == 0666);
+	mock.creates++;
+	if (mock.race_text)
+		mock.text = mock.race_text;
+	if (mock.text)
+		return -17;
+	if (mock.fail_create)
+		return -76;
+	mock.text = mock.created;
+	return 8;
 }
 int ksceIoRead(SceUID fd, void *data, SceSize size)
 {
@@ -30,7 +48,26 @@ int ksceIoRead(SceUID fd, void *data, SceSize size)
 	memcpy(data, mock.text, length);
 	return (int)length;
 }
-int ksceIoClose(SceUID fd) {assert(fd == 7); mock.closes++; return 0;}
+int ksceIoWrite(SceUID fd, const void *data, SceSize size)
+{
+	assert(fd == 8 && mock.text == mock.created);
+	mock.writes++;
+	if (mock.fail_write) return -79;
+	if (mock.zero_write) return 0;
+	if (mock.write_limit && size > (unsigned int)mock.write_limit)
+		size = (SceSize)mock.write_limit;
+	assert(mock.written + size < sizeof(mock.created));
+	memcpy(mock.created + mock.written, data, size);
+	mock.written += size;
+	mock.created[mock.written] = 0;
+	return (int)size;
+}
+int ksceIoClose(SceUID fd)
+{
+	if (fd == 7) mock.closes++;
+	else {assert(fd == 8); mock.create_closes++;}
+	return 0;
+}
 static int panel_on(void) {mock.on++; return mock.fail_on ? -71 : 0;}
 static int panel_off(void) {mock.off++; return mock.fail_off ? -72 : 0;}
 static int panel_brightness(void) {mock.get_brightness++; return mock.fail_brightness ? -73 : 812;}
@@ -66,10 +103,66 @@ int module_get_export_func(SceUID pid, const char *module, uint32_t library,
 	assert(0); return -1;
 }
 
-int main(void)
+static void test_config_creation(void)
 {
 	vitastream_settings_load();
-	assert(!vitastream_settings_speakers_on() && !mock.reads && !mock.closes);
+	assert(vitastream_settings_speakers_on());
+	assert(!strcmp(mock.created, "screen=on\nspeakers=on\n"));
+	assert(mock.creates == 1 && mock.writes == 1 && mock.create_closes == 1);
+	assert(!mock.reads && !mock.closes);
+	vitastream_settings_load();
+	assert(mock.creates == 1 && mock.writes == 1 && mock.reads == 1 && mock.closes == 1);
+
+	memset(&mock, 0, sizeof(mock));
+	mock.write_limit = 3;
+	vitastream_settings_load();
+	assert(!strcmp(mock.created, "screen=on\nspeakers=on\n"));
+	assert(mock.writes > 1 && mock.create_closes == 1);
+
+	memset(&mock, 0, sizeof(mock));
+	mock.fail_create = 1;
+	vitastream_settings_load();
+	assert(vitastream_settings_speakers_on() && mock.creates == 1);
+	assert(!mock.writes && !mock.create_closes);
+
+	memset(&mock, 0, sizeof(mock));
+	mock.fail_write = 1;
+	vitastream_settings_load();
+	assert(vitastream_settings_speakers_on() && mock.writes == 1 && mock.create_closes == 1);
+
+	memset(&mock, 0, sizeof(mock));
+	mock.zero_write = 1;
+	vitastream_settings_load();
+	assert(vitastream_settings_speakers_on() && mock.writes == 1 && mock.create_closes == 1);
+
+	memset(&mock, 0, sizeof(mock));
+	mock.text = "screen=off\nspeakers=off\n";
+	vitastream_settings_load();
+	assert(!vitastream_settings_speakers_on() && !mock.creates && !mock.writes);
+	assert(!strcmp(mock.text, "screen=off\nspeakers=off\n"));
+	mock.fail_read = 1;
+	vitastream_settings_load();
+	assert(vitastream_settings_speakers_on() && !mock.creates && !mock.writes);
+	mock.fail_open = 1;
+	vitastream_settings_load();
+	assert(vitastream_settings_speakers_on() && mock.creates == 1 && !mock.writes);
+	assert(!strcmp(mock.text, "screen=off\nspeakers=off\n"));
+
+	memset(&mock, 0, sizeof(mock));
+	mock.race_text = "screen=off\nspeakers=off\n";
+	vitastream_settings_load();
+	assert(mock.creates == 1 && !mock.writes && !mock.create_closes);
+	assert(mock.text == mock.race_text);
+	vitastream_settings_load();
+	assert(!vitastream_settings_speakers_on() && mock.creates == 1);
+	memset(&mock, 0, sizeof(mock));
+}
+
+int main(void)
+{
+	test_config_creation();
+	vitastream_settings_load();
+	assert(vitastream_settings_speakers_on() && !mock.reads && !mock.closes);
 	assert(vitastream_screen_update(1) == 0 && !mock.off);
 	mock.text = "screen=off\nspeakers=on";
 	vitastream_settings_load();
@@ -105,11 +198,11 @@ int main(void)
 #endif
 	mock.text = "screen=off\nspeakers=broken";
 	vitastream_settings_load();
-	assert(!vitastream_settings_speakers_on());
+	assert(vitastream_settings_speakers_on());
 	assert(vitastream_screen_update(1) == 0 && mock.off == 2);
 	mock.fail_read = 1;
 	vitastream_settings_load();
-	assert(!vitastream_settings_speakers_on() && mock.reads == mock.closes);
-	puts("settings: file/default failures, panel selection, streaming-only blanking and restoration retries passed");
+	assert(vitastream_settings_speakers_on() && mock.reads == mock.closes);
+	puts("settings: automatic config creation, preserved files, I/O failures, panel policy and restoration retries passed");
 	return 0;
 }

@@ -11,7 +11,7 @@ struct vitastream_config {
 	int speakers_on;
 };
 
-/* Missing configuration preserves the existing USB-only audio behavior. */
+/* Enable the local screen and speaker/headphone playback by default. */
 void vitastream_config_defaults(struct vitastream_config *config);
 /* Parse atomically: an invalid file never partially changes the destination. */
 int vitastream_config_parse(const char *text, size_t length,

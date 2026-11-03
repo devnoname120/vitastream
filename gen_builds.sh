@@ -18,8 +18,6 @@ build_variant() {
 }
 
 build_variant vitastream
-build_variant vitastream_oled_off DISPLAY_OFF_OLED=1
-build_variant vitastream_lcd_off DISPLAY_OFF_LCD=1
 build_variant vitastream_diagnostic DIAGNOSTIC=1
 cp vitastream.cfg "$output_dir/vitastream.cfg"
 

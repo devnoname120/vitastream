@@ -27,16 +27,6 @@ ifeq ($(VIDEO_KERNEL_POOL), 1)
 	CFLAGS	+= -DUVC_VIDEO_KERNEL_POOL -DUVC_FRAMEBUFFER_COUNT=1
 endif
 
-ifeq ($(DISPLAY_OFF_OLED), 1)
-	CFLAGS	+= -DDISPLAY_OFF_OLED
-	LIBS	+= -lSceOledForDriver_stub
-endif
-
-ifeq ($(DISPLAY_OFF_LCD), 1)
-	CFLAGS	+= -DDISPLAY_OFF_LCD
-	LIBS	+= -lSceLcdForDriver_stub
-endif
-
 PREFIX	= arm-vita-eabi
 CC	= $(PREFIX)-gcc
 CFLAGS	+= -std=gnu11 -Wl,-q -Wall -O2 -nostartfiles -mcpu=cortex-a9 -mthumb-interwork -Iinclude

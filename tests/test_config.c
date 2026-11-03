@@ -12,7 +12,10 @@ static void parse(const char *text, int screen, int speakers)
 
 int main(void)
 {
-	parse("", 1, 0);
+	parse("", 1, 1);
+	parse("# defaults\n", 1, 1);
+	parse("screen=off\n", 0, 1);
+	parse("speakers=off\n", 1, 0);
 	parse("screen=on\nspeakers=on\n", 1, 1);
 	parse("screen=off\nspeakers=on", 0, 1);
 	parse("screen=on\nspeakers=off\n", 1, 0);

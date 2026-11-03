@@ -19,14 +19,14 @@ The [hardware color space converter](https://wiki.henkaku.xyz/vita/IFTU_Register
 controller directly performs a DMA transfer from the physical address of the resulting converted framebuffer, and therefore, saving CPU usage and power consumption.
 
 Audio is exposed to the computer as a USB Audio Class 1.0 capture/input device
-using 48 kHz, stereo, signed 16-bit PCM. Version 2.1 uses SceAudio's
+using 48 kHz, stereo, signed 16-bit PCM. Version 2.2 uses SceAudio's
 firmware-owned monitor on SourceMixer1 MAIN, restoring the capture path used in
 1.9 for system, PSP and application audio. The firmware manages capture DMA
 and its completion fence. The tap precedes the codec's analog volume and mute
 settings. It does not capture the microphone.
 
-By default, local speaker/headphone output is muted during USB audio capture.
-The new `speakers=on` option enables experimental DMA forwarding of the same
+By default, local speaker/headphone playback remains enabled during USB audio
+capture. The `speakers=on` option enables experimental DMA forwarding of the same
 captured PCM to the native local I2S sink, without changing the USB mix or
 reintroducing 2.0's incomplete secondary-output tap. Stopping capture fences
 the forwarding DMA before restoring Sony's normal output route. Simultaneous
@@ -78,14 +78,15 @@ coverage matrix and validation commands.
 
 **Download**:
 
-* [Version 2.1 downloads](https://github.com/devnoname120/vitastream/releases/tag/v2.1)
+* [Version 2.2 downloads](https://github.com/devnoname120/vitastream/releases/tag/v2.2)
 
-Use `vitastream.skprx` for normal operation and copy the supplied
-`vitastream.cfg` to `ur0:/tai/` to enable local playback during USB recording.
+Use `vitastream.skprx` for normal operation. The plugin creates
+`ur0:/tai/vitastream.cfg` on startup if it is missing, with the local screen and
+speaker playback enabled. The supplied `vitastream.cfg` is also available as
+an example.
 `vitastream_diagnostic.skprx` adds logging for troubleshooting. Install only one
-plugin variant. The legacy `vitastream_oled_off.skprx` and
-`vitastream_lcd_off.skprx` default to screen off when no configuration file
-overrides that setting; the normal build supports `screen=off` on either panel.
+plugin variant. Use `screen=off` in the configuration to disable either an OLED
+or LCD panel during capture; both builds support this setting.
 
 Releases published before the rename contain `udcd_uvc.skprx`. Rename that
 downloaded file to `vitastream.skprx` to use the installation paths below.
@@ -102,7 +103,7 @@ previous one; only one USB video request is queued at a time. A buffer is not
 reused or freed until its request completes, including after cancellation.
 All five video modes and the USB audio path are retained.
 
-The version 2.1 release downloads use `VIDEO_KERNEL_POOL=1`, the bounded
+The version 2.2 release downloads use `VIDEO_KERNEL_POOL=1`, the bounded
 single-buffer configuration tested on the retail Vita. This keeps video
 allocation outside the application's PhyCont pool and sacrifices conversion/
 transmission overlap. To reproduce all release variants with VitaSDK:
@@ -161,7 +162,8 @@ They do not replace device tests of IFTU, USB timing, or simultaneous audio.
 
 ### Configuration
 
-Copy [vitastream.cfg](vitastream.cfg) to `ur0:/tai/vitastream.cfg`:
+The plugin automatically creates `ur0:/tai/vitastream.cfg` on startup when it
+is missing. Both options default to on:
 
 ```ini
 screen=on
@@ -179,10 +181,9 @@ speakers=on
   `speakers=off` retains the existing USB-only audio path.
 
 The file is read on plugin startup; reboot after editing it. `#` and `;` start
-comments. Keys and `on`/`off` values are case-insensitive. An absent or invalid
-file preserves the existing defaults: screen on, local forwarding off.
-The supplied file explicitly enables both options. The legacy OLED/LCD-off
-build flags remain supported as defaults when no configuration overrides them.
+comments. Keys and `on`/`off` values are case-insensitive. Existing files are
+preserved. An unreadable or invalid file uses the defaults: screen on and local
+playback on. The same defaults apply if the file cannot be created.
 
 **Installation**:
 

@@ -1,6 +1,7 @@
 #include <psp2kern/kernel/modulemgr.h>
 #include <psp2kern/kernel/threadmgr.h>
 #include <psp2kern/kernel/sysmem.h>
+#include <psp2kern/kernel/sysmem/uid_guid.h>
 #include <psp2kern/kernel/cpu.h>
 #include <psp2kern/udcd.h>
 #include <psp2kern/display.h>
@@ -40,6 +41,10 @@
 #define UVC_USB_PID			0x1337
 
 #define SCE_DISPLAY_PIXELFORMAT_BGRA5551 0x50000000
+
+/* Exported by the pinned SDK, but its older sysmem header omits this ABI. */
+int ksceKernelProcModeVAtoPA(SceUID pid, SceUInt32 permission,
+	const void *va, void **pa);
 
 int ksceOledDisplayOn();
 int ksceOledDisplayOff();
@@ -101,6 +106,7 @@ static atomic_int uvc_thread_run;
 static atomic_int stream;
 static atomic_uint uvc_capture_interval = 166666;
 static atomic_uint uvc_pacing_epoch;
+static atomic_int uvc_recover_pending;
 static int uvc_driver_registered;
 
 #if defined(DISPLAY_OFF_OLED) || defined(DISPLAY_OFF_LCD)
@@ -401,6 +407,7 @@ static int uvc_udcd_attach(int usb_version, void *user_data)
 
 	ksceUdcdClearFIFO(&endpoints[1]);
 	uac_audio_on_attach();
+	uvc_recover_pending = 0;
 
 #if defined(DISPLAY_OFF_OLED)
 	prev_brightness = ksceOledGetBrightness();
@@ -419,6 +426,10 @@ static void uvc_udcd_detach(void *user_data)
 
 	uvc_handle_video_abort();
 	uac_audio_request_stop();
+	if (uvc_thread_run) {
+		uvc_recover_pending = 1;
+		ksceKernelSetEventFlag(uvc_event_flag_id, 1);
+	}
 
 #if defined(DISPLAY_OFF_OLED)
 	ksceOledDisplayOn();
@@ -445,7 +456,12 @@ static int uvc_driver_stop(int size, void *p, void *user_data)
 {
 	LOG("uvc_driver_stop\n");
 
+	uvc_handle_video_abort();
 	uac_audio_request_stop();
+	if (uvc_thread_run) {
+		uvc_recover_pending = 1;
+		ksceKernelSetEventFlag(uvc_event_flag_id, 1);
+	}
 	return 0;
 }
 
@@ -474,14 +490,51 @@ static SceUdcdDriver uvc_udcd_driver = {
 int uvc_start(void);
 int uvc_stop(void);
 
+static int uvc_mtp_ready(void)
+{
+	int device_state = ksceUdcdGetDeviceState();
+	return ksceUdcdGetDrvState("USB_MTP_Driver") == SCE_UDCD_STATUS_DRIVER_STARTED &&
+	       ksceUdcdGetDrvState("USBStor_Driver") != SCE_UDCD_STATUS_DRIVER_STARTED &&
+	       device_state >= 0 && (device_state & SCE_UDCD_STATUS_ACTIVATED);
+}
+
+static int uvc_recover_usb(void)
+{
+	int ret;
+	if (!uvc_thread_run || !uvc_recover_pending || !uvc_mtp_ready())
+		return 0;
+	ret = uac_audio_stop_sync();
+	if (ret < 0)
+		return ret;
+	uvc_video_cancel();
+	ret = uvc_video_release();
+	if (ret < 0)
+		return ret;
+	/* VitaShell can start another storage session while workers drain. */
+	if (!uvc_thread_run || !uvc_mtp_ready())
+		return 0;
+	ret = uvc_start();
+	if (ret >= 0)
+		uvc_recover_pending = 0;
+	diagnostic_record("recover UVC after MTP restore", ret);
+	return ret;
+}
+
 static inline unsigned int display_to_iftu_pixelformat(unsigned int fmt)
 {
 	switch (fmt) {
 	case SCE_DISPLAY_PIXELFORMAT_A8B8G8R8:
-	default:
 		return SCE_IFTU_PIXELFORMAT_BGRX8888;
+	case 0x00100000:
+		return SCE_IFTU_PIXELFORMAT_RGBX8888;
+	case 0x60800000:
+		return SCE_IFTU_PIXELFORMAT_BGRA1010102;
+	case 0x60900000:
+		return SCE_IFTU_PIXELFORMAT_RGBA1010102;
 	case SCE_DISPLAY_PIXELFORMAT_BGRA5551:
 		return SCE_IFTU_PIXELFORMAT_BGRA5551;
+	default:
+		return 0;
 	}
 }
 
@@ -489,10 +542,14 @@ static inline unsigned int display_pixelformat_bpp(unsigned int fmt)
 {
 	switch (fmt) {
 	case SCE_DISPLAY_PIXELFORMAT_A8B8G8R8:
-	default:
+	case 0x00100000:
+	case 0x60800000:
+	case 0x60900000:
 		return 4;
 	case SCE_DISPLAY_PIXELFORMAT_BGRA5551:
 		return 2;
+	default:
+		return 0;
 	}
 }
 
@@ -504,8 +561,51 @@ static int frame_convert_to_nv12(uintptr_t dst_paddr, const SceDisplayFrameBufIn
 	unsigned int src_width_aligned = ALIGN(src_width, 16);
 	unsigned int src_pitch = fb_info->framebuf.pitch;
 	unsigned int src_height = fb_info->framebuf.height;
+	unsigned int src_height_aligned = ALIGN(src_height, 8);
 	unsigned int src_pixelfmt = fb_info->framebuf.pixelformat;
 	unsigned int src_pixelfmt_bpp = display_pixelformat_bpp(src_pixelfmt);
+	uint64_t source_row_size = (uint64_t)src_pitch * src_pixelfmt_bpp;
+	uint64_t source_size = (uint64_t)src_pitch * src_height_aligned * src_pixelfmt_bpp;
+	void *source_start, *source_end;
+	int ret, unlock_ret;
+
+	if (!src_paddr || !fb_info->framebuf.base || fb_info->pid <= 0 ||
+	    !src_width || !src_height || src_width > UINT32_MAX - 15u ||
+	    src_height > UINT32_MAX - 7u || src_pitch < src_width_aligned ||
+	    !src_pixelfmt_bpp || !source_row_size || source_row_size > UINT32_MAX ||
+	    src_height_aligned > UINT32_MAX / source_row_size ||
+	    !source_size || source_size > UINT32_MAX ||
+	    dst_width <= 0 || dst_height <= 0 ||
+	    (uintptr_t)fb_info->framebuf.base > UINTPTR_MAX - (source_size - 1) ||
+	    src_paddr > UINTPTR_MAX - (source_size - 1) ||
+	    ((uint64_t)src_width << 16) / dst_width > UINT32_MAX ||
+	    ((uint64_t)src_height << 16) / dst_height > UINT32_MAX)
+		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
+
+	/* GetProcFrameBufInternal returns a snapshot without a source lease.
+	 * Pin its process and backing memory until IFTU has finished reading it. */
+	ret = ksceGUIDReferObject(fb_info->pid, NULL);
+	if (ret < 0)
+		return ret;
+	ret = ksceKernelLockRangeProc(fb_info->pid, fb_info->framebuf.base,
+		(SceSize)source_size);
+	if (ret < 0)
+		goto release_process;
+	ret = ksceKernelProcModeVAtoPA(fb_info->pid, 0x10,
+		fb_info->framebuf.base, &source_start);
+	if (ret >= 0)
+		ret = ksceKernelProcModeVAtoPA(fb_info->pid, 0x10,
+			(const void *)((uintptr_t)fb_info->framebuf.base + (uintptr_t)source_size - 1),
+			&source_end);
+	if (ret < 0)
+		goto unlock_source;
+	/* Drop a stale/replaced or non-contiguous surface rather than reading
+	 * its old physical address after an application changes framebuffers. */
+	if ((uintptr_t)source_start != src_paddr ||
+	    (uintptr_t)source_end != src_paddr + source_size - 1) {
+		ret = SCE_UDCD_ERROR_INVALID_ARGUMENT;
+		goto unlock_source;
+	}
 
 	static SceIftuCscParams RGB_to_YCbCr_JPEG_csc_params = {
 		0, 0x202, 0x3FF,
@@ -534,23 +634,23 @@ static int frame_convert_to_nv12(uintptr_t dst_paddr, const SceDisplayFrameBufIn
 	memset(&src, 0, sizeof(src));
 	src.fb.pixelformat = display_to_iftu_pixelformat(src_pixelfmt);
 	src.fb.width = src_width_aligned;
-	src.fb.height = src_height;
+	src.fb.height = src_height_aligned;
 	src.fb.leftover_stride = (src_pitch - src_width_aligned) * src_pixelfmt_bpp;
 	src.fb.leftover_align = 0;
 	src.fb.paddr0 = src_paddr;
 	src.reserved[0] = 0;
 	src.reserved[1] = 0;
 	src.reserved[2] = 0;
-	src.src_w = (src_width * 0x10000) / dst_width;
-	src.src_h = (src_height * 0x10000) / dst_height;
+	src.src_w = ((uint64_t)src_width << 16) / dst_width;
+	src.src_h = ((uint64_t)src_height << 16) / dst_height;
 	src.dst_x = 0;
 	src.dst_y = 0;
 	src.src_x = 0;
 	src.src_y = 0;
 	src.crop_top = 0;
-	src.crop_bottom = 0;
+	src.crop_bottom = src_height_aligned - src_height;
 	src.crop_left = 0;
-	src.crop_right = 0;
+	src.crop_right = src_width_aligned - src_width;
 
 	SceIftuFrameBuf dst;
 	memset(&dst, 0, sizeof(dst));
@@ -562,7 +662,15 @@ static int frame_convert_to_nv12(uintptr_t dst_paddr, const SceDisplayFrameBufIn
 	dst.paddr0 = dst_paddr;
 	dst.paddr1 = dst_paddr + dst_width * dst_height;
 
-	return ksceIftuCsc(&dst, (SceIftuPlaneState *)&src, &params);
+	ret = ksceIftuCsc(&dst, (SceIftuPlaneState *)&src, &params);
+unlock_source:
+	unlock_ret = ksceKernelUnlockRangeProc(fb_info->pid,
+		fb_info->framebuf.base, (SceSize)source_size);
+	if (ret >= 0 && unlock_ret < 0)
+		ret = unlock_ret;
+release_process:
+	ksceGUIDReleaseObject(fb_info->pid);
+	return ret;
 }
 
 static int send_frame(void)
@@ -704,10 +812,17 @@ static int uvc_thread(SceSize args, void *argp)
 
 	stream = 0;
 	diagnostic_record("uvc_thread entered", 0);
+	ksceDisplayWaitSetFrameBufCB();
+#ifndef DEBUG
+	ksceKernelDelayThreadCB(15 * 1000 * 1000);
+#endif
+	if (!uvc_thread_run)
+		return 0;
 	start_result = uvc_start();
 	diagnostic_record("uvc_start", start_result);
 	if (start_result < 0)
 		return start_result;
+	uvc_recover_pending = 0;
 
 	display_vblank_cb_uid = ksceKernelCreateCallback("uvc_display_vblank", 0,
 							 display_vblank_cb_func, NULL);
@@ -732,10 +847,19 @@ static int uvc_thread(SceSize args, void *argp)
 
 		if (!uvc_thread_run)
 			break;
+		if (!stream) {
+			uvc_video_cancel();
+			uvc_video_release();
+		}
+		uvc_recover_usb();
 		if (ret == 0 && stream) {
+			static int last_error;
 			ret = send_frame();
-			if (ret < 0)
+			if (ret < 0 && ret != last_error) {
 				LOG("Error processing NV12 frame: 0x%08X\n", ret);
+				diagnostic_record("NV12 frame capture error", ret);
+			}
+			last_error = ret;
 		} else if (ret == (int)0x80028005) {
 			if (!stream)
 				uvc_video_cancel();
@@ -756,20 +880,6 @@ int uvc_start(void)
 	memcpy(&uvc_probe_control_setting, &uvc_probe_control_setting_default,
 		sizeof(uvc_probe_control_setting));
 
-	/*
-	 * Wait until there's a framebuffer set.
-	 */
-	ksceDisplayWaitSetFrameBufCB();
-	diagnostic_record("framebuffer ready", 0);
-
-#ifndef DEBUG
-	/*
-	 * Wait until LiveArea is more or less ready.
-	 */
-	ksceKernelDelayThreadCB(15 * 1000 * 1000);
-	diagnostic_record("LiveArea delay complete", 0);
-#endif
-
 	ret = ksceUdcdDeactivate();
 	diagnostic_record("ksceUdcdDeactivate", ret);
 	if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT) {
@@ -778,6 +888,7 @@ int uvc_start(void)
 	}
 
 	ksceUdcdStop("USB_MTP_Driver", 0, NULL);
+	ksceUdcdStop(UVC_DRIVER_NAME, 0, NULL);
 	ksceUdcdStop("USBPSPCommunicationDriver", 0, NULL);
 	ksceUdcdStop("USBSerDriver", 0, NULL);
 	ksceUdcdStop("USBDeviceControllerDriver", 0, NULL);
@@ -786,7 +897,7 @@ int uvc_start(void)
 	diagnostic_record("start USBDeviceControllerDriver", ret);
 	if (ret < 0) {
 		LOG("Error starting the USBDeviceControllerDriver driver (0x%08X)\n", ret);
-		return ret;
+		goto restore_mtp;
 	}
 
 	ret = ksceUdcdStart(UVC_DRIVER_NAME, 0, NULL);
@@ -809,6 +920,10 @@ err_activate:
 	ksceUdcdStop(UVC_DRIVER_NAME, 0, NULL);
 err_start_uvc_driver:
 	ksceUdcdStop("USBDeviceControllerDriver", 0, NULL);
+restore_mtp:
+	ksceUdcdStart("USBDeviceControllerDriver", 0, NULL);
+	ksceUdcdStart("USB_MTP_Driver", 0, NULL);
+	ksceUdcdActivate(0x4E4);
 	return ret;
 }
 

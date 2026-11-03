@@ -48,6 +48,7 @@ typedef struct SceUdcdDeviceRequest {
 #define SCE_KERNEL_ERROR_WAIT_TIMEOUT ((int)0x80028005)
 #define SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE ((int)0x80024302)
 #define SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_PHYCONT_NC_RW 0x30808006
+#define SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_NC_RW 0x10208006
 
 SceUID ksceKernelCreateEventFlag(const char *name, unsigned int attr,
 	unsigned int bits, void *opt);

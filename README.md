@@ -19,11 +19,19 @@ The [hardware color space converter](https://wiki.henkaku.xyz/vita/IFTU_Register
 controller directly performs a DMA transfer from the physical address of the resulting converted framebuffer, and therefore, saving CPU usage and power consumption.
 
 Audio is exposed to the computer as a USB Audio Class 1.0 capture/input device
-using 48 kHz, stereo, signed 16-bit PCM. It captures the normal
-mix from SourceMixer1's non-destructive secondary output while the
-normal main output continues feeding the selected I2S output. The tap is
-after SceAudio and SceAudioSource have been mixed and before the codec applies
-analog volume or mute. It does not capture the microphone.
+using 48 kHz, stereo, signed 16-bit PCM. The current test build uses SceAudio's
+firmware-owned monitor on SourceMixer1 MAIN, restoring the capture path used in
+1.9 for system, PSP and application audio. The firmware manages capture DMA
+and its completion fence. The tap precedes the codec's analog volume and mute
+settings. It does not capture the microphone.
+
+**Local speaker/headphone output is muted while USB audio capture is active.**
+Stopping USB audio restores the normal local route. This is a tradeoff of the
+restored full-mix path; 2.0's secondary-output tap missed audio in user reports.
+See the [unreleased issue test build](docs/issues-test.md) for the changes and
+the remaining device checks.
+The [retail verification report](docs/retail-validation-2026-11-03.md) records
+the confirmed 3.60 video/audio result and its testing limits.
 
 Unlike audio-capture plugins that hook individual audio ports as they are
 opened and closed (BGM, sound effects, and similar sources), this plugin
@@ -83,10 +91,13 @@ previous one; only one USB video request is queued at a time. A buffer is not
 reused or freed until its request completes, including after cancellation.
 All five video modes and the USB audio path are retained.
 
-Allocation first uses the original kernel memory pool. If that pool has no
-free contiguous physical pages, it retries the kernel's dedicated physically
-contiguous, non-cacheable pool. Both pools remain finite shared resources;
-if the second buffer still cannot be allocated, capture falls back to one buffer.
+Video buffers use the kernel's physically contiguous, non-cacheable pool rather
+than consuming the ordinary kernel-driver pool needed during application startup.
+If the second buffer cannot be allocated, capture falls back to one buffer. If
+the first allocation fails, the frame is skipped; neither case falls back to
+kernel-driver memory. The physical-contiguous pool is still a finite shared
+resource. See the [issue #3 investigation](docs/issue-3-memory.md) for the firmware
+evidence and device-validation limits.
 For a deliberately single-buffer build, use:
 
 ```sh
@@ -104,6 +115,12 @@ and the remaining testing limits. The overlap is adapted from
 with explicit buffer ownership and without removing 720p. Video remains
 uncompressed NV12, using IFTU and USB DMA.
 
+Before conversion, capture validates the source format and geometry, retains
+the source process and memory, and rechecks the physical addresses. References
+are released after synchronous IFTU conversion. A stale or unsupported source
+is skipped so application or camera transitions do not send an unchecked
+surface to IFTU.
+
 Capture pacing uses integer arithmetic at the nominal 60 Hz vblank cadence.
 It tolerates either rounding of the supported frame intervals, retains the
 fractional remainder, and coalesces delayed notifications instead of queuing
@@ -118,7 +135,8 @@ make test
 
 The tests require Python 3 and a native C compiler supporting AddressSanitizer
 and UndefinedBehaviorSanitizer. They exercise the production video transport,
-capture scheduling, and shutdown path with simulated kernel/USB dependencies.
+capture scheduling, source references, USB recovery, audio backend and shutdown
+path with simulated firmware/kernel/USB dependencies.
 They do not replace device tests of IFTU, USB timing, or simultaneous audio.
 
 **Installation**:
@@ -159,10 +177,15 @@ If you use Windows 10 you might have to change the Camera access permissions on 
 
 On Linux I recommend using *mplayer* (`mplayer tv:// -tv driver=v4l2:device=/dev/videoX:width=960:height=544`).
 
-USB audio captures the normal SourceMixer1 mix before it reaches the selected
-I2S output. The firmware's mapped normal sinks are supported; capture/loopback
-ports and unmapped sinks are rejected. Audio routed through another mixer or
-an active firmware monitor is not captured by this path.
+USB audio requires the firmware monitor route to be available. Capture rejects
+an already-active monitor or Bluetooth route instead of replacing its owner.
+Disable that route before retrying USB audio if necessary.
+
+VitaShell USB storage temporarily takes over the USB controller. Once storage
+stops and VitaShell restores MTP, the worker drains outstanding captures and
+restarts vitastream automatically. The host may need to reopen its capture
+device after re-enumeration. No reboot should be needed for this transition;
+this recovery path still needs confirmation on a Vita.
 
 Note: Remember that if anything goes wrong (like PSVita not booting) you can always press L at boot to skip plugin loading.
 

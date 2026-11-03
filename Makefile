@@ -23,6 +23,12 @@ ifeq ($(PARALLEL), 0)
 	CFLAGS	+= -DUVC_FRAMEBUFFER_COUNT=1
 endif
 
+# Issue #4 comparison build: leave the application's PhyCont pool untouched.
+# Keep this opt-in and bounded to one buffer; ordinary kernel memory is finite.
+ifeq ($(VIDEO_KERNEL_POOL), 1)
+	CFLAGS	+= -DUVC_VIDEO_KERNEL_POOL -DUVC_FRAMEBUFFER_COUNT=1
+endif
+
 ifeq ($(DISPLAY_OFF_OLED), 1)
 	CFLAGS	+= -DDISPLAY_OFF_OLED
 	LIBS	+= -lSceOledForDriver_stub

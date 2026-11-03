@@ -9,6 +9,11 @@ record the tested installation.
 These measurements predate the merge of the SourceMixer1 secondary audio path;
 they do not validate that audio implementation.
 
+The allocation order below is historical. The current policy uses only the
+physical-contiguous pool for video buffers; see the
+[issue #3 investigation](issue-3-memory.md). The measurements below have not
+been repeated for that change.
+
 ## Change retained
 
 `src/video.c` first tries the original `0x10208006` kernel allocation. Only

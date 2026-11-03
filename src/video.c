@@ -11,6 +11,9 @@
 #if UVC_FRAMEBUFFER_COUNT != 1 && UVC_FRAMEBUFFER_COUNT != 2
 #error UVC_FRAMEBUFFER_COUNT must be 1 or 2
 #endif
+#if defined(UVC_VIDEO_KERNEL_POOL) && UVC_FRAMEBUFFER_COUNT != 1
+#error The kernel-pool comparison build must use one video buffer
+#endif
 
 static struct {
 	SceUID uid;
@@ -113,11 +116,15 @@ static int allocate_slot(unsigned int slot, unsigned int frame_size)
 	opt.attr = SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_PHYCONT |
 		SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_HAS_ALIGNMENT;
 	opt.alignment = 4096;
-	slots[slot].uid = ksceKernelAllocMemBlock("uvc_frame_buffer", 0x10208006, size, &opt);
-	/* Large DMA buffers may not fit in the ordinary kernel physical pool. */
-	if (slots[slot].uid == (int)SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE)
-		slots[slot].uid = ksceKernelAllocMemBlock("uvc_frame_buffer",
-			SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_PHYCONT_NC_RW, size, &opt);
+	/* The optional issue #4 comparison uses one bounded kernel buffer so an
+	 * application can request the entire shared PhyCont pool. Neither policy
+	 * falls back to the other pool on failure. */
+	slots[slot].uid = ksceKernelAllocMemBlock("uvc_frame_buffer",
+#ifdef UVC_VIDEO_KERNEL_POOL
+		SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_NC_RW, size, &opt);
+#else
+		SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_PHYCONT_NC_RW, size, &opt);
+#endif
 	if (slots[slot].uid < 0)
 		return slots[slot].uid;
 

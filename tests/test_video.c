@@ -24,7 +24,8 @@ static struct {
 	int alloc_calls, base_calls, paddr_calls, live_blocks;
 	int waits, sends, cancels, deletes;
 	int fail_alloc, fail_base, fail_paddr;
-	int fail_physical_page, fail_contiguous, contiguous_alloc_calls;
+	int fail_physical_page, contiguous_alloc_calls;
+	unsigned int kernel_free, contiguous_free;
 	int fail_event, fail_send, fail_free, fail_delete;
 	int auto_complete, cancel_complete, complete_on_send;
 	int completion_code;
@@ -116,21 +117,23 @@ SceUID ksceKernelAllocMemBlock(const char *name, SceKernelMemBlockType type,
 	assert(opt->attr == (SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_PHYCONT |
 		SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_HAS_ALIGNMENT));
 	mock.alloc_calls++;
-	if (type == SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_PHYCONT_NC_RW) {
+	if (type == SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_PHYCONT_NC_RW)
 		mock.contiguous_alloc_calls++;
-		if (mock.fail_contiguous)
-			return MOCK_ERROR;
-	}
 	if (mock.alloc_calls == mock.fail_physical_page)
 		return SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE;
 	if (mock.alloc_calls == mock.fail_alloc)
 		return MOCK_ERROR;
+	unsigned int *available = type == SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_PHYCONT_NC_RW ?
+		&mock.contiguous_free : &mock.kernel_free;
+	if (size > *available)
+		return SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE;
 	for (unsigned int i = 0; i < 8; i++) {
 		if (!mock.memory[i].base) {
 			mock.memory[i].base = malloc(size);
 			assert(mock.memory[i].base);
 			mock.memory[i].size = size;
 			mock.memory[i].type = type;
+			*available -= size;
 			memset(mock.memory[i].base, 0xCC, size);
 			mock.live_blocks++;
 			return (SceUID)i + 1;
@@ -146,6 +149,10 @@ int ksceKernelFreeMemBlock(SceUID id)
 		mock.memory[id - 1].size, mock.queued->data));
 	if (mock.fail_free)
 		return MOCK_ERROR;
+	if (mock.memory[id - 1].type == SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_PHYCONT_NC_RW)
+		mock.contiguous_free += mock.memory[id - 1].size;
+	else
+		mock.kernel_free += mock.memory[id - 1].size;
 	free(mock.memory[id - 1].base);
 	mock.memory[id - 1].base = NULL;
 	mock.live_blocks--;
@@ -208,6 +215,7 @@ static void reset_mock(void)
 	assert(!mock.event && !mock.live_blocks && !mock.queued);
 	memset(&mock, 0, sizeof(mock));
 	mock.auto_complete = mock.cancel_complete = 1;
+	mock.kernel_free = mock.contiguous_free = 4u * 1024u * 1024u;
 }
 
 static void setup(void)
@@ -612,56 +620,140 @@ static void test_capture_conversion_and_transfer_errors(void)
 	teardown();
 }
 
-static void test_contiguous_pool_fallback(void)
+#ifndef UVC_VIDEO_KERNEL_POOL
+static void test_capture_preserves_kernel_memory(void)
 {
 	struct uvc_video_buffer first, next;
-	for (int slot = 1; slot <= UVC_FRAMEBUFFER_COUNT; slot++) {
+	const unsigned int frame_sizes[] = {FRAME_SIZE, MAX_UVC_VIDEO_FRAME_SIZE};
+	for (unsigned int i = 0; i < sizeof(frame_sizes) / sizeof(frame_sizes[0]); i++) {
 		setup();
-		mock.fail_physical_page = slot;
-		assert(uvc_video_prepare(MAX_UVC_VIDEO_FRAME_SIZE, &first) == 0);
-		assert(mock.contiguous_alloc_calls == 1);
-		assert(mock.alloc_calls == UVC_FRAMEBUFFER_COUNT + 1);
+		mock.kernel_free = 1024u * 1024u;
+		assert(uvc_video_prepare(frame_sizes[i], &first) == 0);
+		assert(mock.kernel_free == 1024u * 1024u);
+		assert(mock.contiguous_alloc_calls == UVC_FRAMEBUFFER_COUNT);
+		assert(mock.alloc_calls == UVC_FRAMEBUFFER_COUNT);
 		assert(mock.live_blocks == UVC_FRAMEBUFFER_COUNT);
-		assert(mock.memory[slot - 1].type == SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_PHYCONT_NC_RW);
-		fill(&first, MAX_UVC_VIDEO_FRAME_SIZE, 0x45);
+		for (int slot = 0; slot < UVC_FRAMEBUFFER_COUNT; slot++)
+			assert(mock.memory[slot].type == SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_PHYCONT_NC_RW);
+		fill(&first, frame_sizes[i], 0x45);
 		assert(uvc_video_submit(0) == 0);
-		assert(uvc_video_prepare(MAX_UVC_VIDEO_FRAME_SIZE, &next) == 0);
+		assert(uvc_video_prepare(frame_sizes[i], &next) == 0);
 		if (UVC_FRAMEBUFFER_COUNT == 2)
 			assert(next.frame != first.frame && mock.queued);
 		else
 			assert(next.frame == first.frame && !mock.queued);
 		teardown();
+		assert(mock.kernel_free == 1024u * 1024u);
+		assert(mock.contiguous_free == 4u * 1024u * 1024u);
+	}
+}
 
+static void test_contiguous_pool_pressure(void)
+{
+	struct uvc_video_buffer first, next;
+	const unsigned int block_size = (FRAME_SIZE + 16u + 4095u) & ~4095u;
+	for (unsigned int capacity = 0; capacity <= 1; capacity++) {
 		setup();
-		mock.fail_physical_page = slot;
-		mock.fail_contiguous = 1;
+		mock.contiguous_free = capacity * block_size;
 		int result = uvc_video_prepare(FRAME_SIZE, &first);
-		assert(result == (slot == 1 ? MOCK_ERROR : 0));
-		assert(mock.contiguous_alloc_calls == 1);
-		assert(mock.live_blocks == slot - 1);
+		assert(result == (capacity ? 0 : SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE));
+		assert(mock.live_blocks == (int)capacity);
+		assert(mock.kernel_free == 4u * 1024u * 1024u);
+		assert(mock.alloc_calls == mock.contiguous_alloc_calls);
+		if (capacity) {
+			fill(&first, FRAME_SIZE, 0x46);
+			assert(uvc_video_submit(0) == 0);
+			assert(uvc_video_prepare(FRAME_SIZE, &next) == 0);
+			assert(next.frame == first.frame && !mock.queued);
+			assert(mock.waits == 1);
+		} else {
+			assert(uvc_video_submit(0) < 0);
+		}
 		teardown();
+		assert(mock.contiguous_free == capacity * block_size);
+	}
 
+	setup();
+	mock.contiguous_free = 0;
+	assert(uvc_video_prepare(FRAME_SIZE, &first) == SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE);
+	mock.contiguous_free = UVC_FRAMEBUFFER_COUNT * block_size;
+	assert(uvc_video_prepare(FRAME_SIZE, &first) == 0);
+	assert(mock.live_blocks == UVC_FRAMEBUFFER_COUNT);
+	assert(mock.kernel_free == 4u * 1024u * 1024u);
+	fill(&first, FRAME_SIZE, 0x47);
+	assert(uvc_video_submit(0) == 0);
+	teardown();
+	assert(mock.contiguous_free == UVC_FRAMEBUFFER_COUNT * block_size);
+}
+
+static void test_contiguous_pool_errors_do_not_use_kernel_memory(void)
+{
+	struct uvc_video_buffer buffer;
+	for (int slot = 1; slot <= UVC_FRAMEBUFFER_COUNT; slot++) {
 		for (int operation = 0; operation < 2; operation++) {
 			setup();
-			mock.fail_physical_page = slot;
 			if (operation == 0)
-				mock.fail_base = slot;
+				mock.fail_physical_page = slot;
 			else
-				mock.fail_paddr = slot;
-			result = uvc_video_prepare(FRAME_SIZE, &first);
-			assert(result == (slot == 1 ? MOCK_ERROR : 0));
-			assert(mock.contiguous_alloc_calls == 1);
+				mock.fail_alloc = slot;
+			int error = operation == 0 ? SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE : MOCK_ERROR;
+			int result = uvc_video_prepare(FRAME_SIZE, &buffer);
+			assert(result == (slot == 1 ? error : 0));
+			assert(mock.alloc_calls == slot && mock.contiguous_alloc_calls == slot);
 			assert(mock.live_blocks == slot - 1);
+			assert(mock.kernel_free == 4u * 1024u * 1024u);
 			teardown();
 		}
-
-		setup();
-		mock.fail_alloc = slot;
-		result = uvc_video_prepare(FRAME_SIZE, &first);
-		assert(result == (slot == 1 ? MOCK_ERROR : 0));
-		assert(mock.contiguous_alloc_calls == 0);
-		teardown();
 	}
+}
+#else
+static void test_kernel_pool_limits_and_no_fallback(void)
+{
+	struct uvc_video_buffer buffer;
+	const unsigned int block_size = (MAX_UVC_VIDEO_FRAME_SIZE + 16u + 4095u) & ~4095u;
+	setup();
+	mock.contiguous_free = 26u * 1024u * 1024u;
+	mock.kernel_free = block_size - 1;
+	assert(uvc_video_prepare(MAX_UVC_VIDEO_FRAME_SIZE, &buffer) == SCE_KERNEL_ERROR_NO_FREE_PHYSICAL_PAGE);
+	assert(mock.alloc_calls == 1 && !mock.live_blocks && !mock.contiguous_alloc_calls);
+	assert(mock.contiguous_free == 26u * 1024u * 1024u);
+	mock.kernel_free = block_size;
+	assert(uvc_video_prepare(MAX_UVC_VIDEO_FRAME_SIZE, &buffer) == 0);
+	assert(mock.live_blocks == 1 && mock.kernel_free == 0);
+	assert(mock.memory[0].type == SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_ROOT_NC_RW);
+	assert(mock.memory[0].size == 1352u * 1024u);
+	fill(&buffer, MAX_UVC_VIDEO_FRAME_SIZE, 0x49);
+	assert(uvc_video_submit(0) == 0);
+	assert(uvc_video_prepare(MAX_UVC_VIDEO_FRAME_SIZE, &buffer) == 0);
+	assert(mock.live_blocks == 1 && !mock.queued);
+	teardown();
+	assert(mock.kernel_free == block_size && mock.contiguous_free == 26u * 1024u * 1024u);
+}
+#endif
+
+static void test_application_requests_entire_contiguous_pool(void)
+{
+	struct uvc_video_buffer buffer;
+	const unsigned int application_size = 26u * 1024u * 1024u;
+	setup();
+	mock.contiguous_free = application_size;
+	assert(uvc_video_prepare(MAX_UVC_VIDEO_FRAME_SIZE, &buffer) == 0);
+	/* A whole-pool application request fails if capture has any allocation
+	 * in that pool. This models the 26 MiB request in the WiliWili dump. */
+	int application_can_allocate = mock.contiguous_free >= application_size;
+#ifdef UVC_VIDEO_KERNEL_POOL
+	assert(application_can_allocate && !mock.contiguous_alloc_calls);
+	mock.contiguous_free -= application_size;
+	fill(&buffer, MAX_UVC_VIDEO_FRAME_SIZE, 0x48);
+	assert(uvc_video_submit(0) == 0);
+	assert(uvc_video_prepare(MAX_UVC_VIDEO_FRAME_SIZE, &buffer) == 0);
+	assert(!mock.contiguous_free && mock.live_blocks == 1);
+	mock.contiguous_free += application_size;
+#else
+	assert(!application_can_allocate && mock.contiguous_alloc_calls);
+#endif
+	teardown();
+	assert(mock.contiguous_free == application_size);
 }
 
 int main(void)
@@ -673,7 +765,14 @@ int main(void)
 	test_stalled_transfer_retains_resources();
 	test_resolution_changes_and_idle_release();
 	test_allocation_failures();
-	test_contiguous_pool_fallback();
+#ifndef UVC_VIDEO_KERNEL_POOL
+	test_capture_preserves_kernel_memory();
+	test_contiguous_pool_pressure();
+	test_contiguous_pool_errors_do_not_use_kernel_memory();
+#else
+	test_kernel_pool_limits_and_no_fallback();
+#endif
+	test_application_requests_entire_contiguous_pool();
 	test_submission_and_completion_errors();
 	test_synchronous_completion_and_header();
 	test_size_and_alignment();
@@ -684,6 +783,10 @@ int main(void)
 	test_capture_state_changes_during_submit();
 	test_capture_samples_source_after_buffer_wait();
 	test_capture_conversion_and_transfer_errors();
-	printf("video: 15 test groups passed (%d buffer configuration)\n", UVC_FRAMEBUFFER_COUNT);
+#ifdef UVC_VIDEO_KERNEL_POOL
+	printf("video: 16 test groups passed (single buffer, kernel-pool comparison)\n");
+#else
+	printf("video: 18 test groups passed (%d buffer configuration)\n", UVC_FRAMEBUFFER_COUNT);
+#endif
 	return 0;
 }

@@ -128,6 +128,20 @@ def linked_imports(path):
     return result
 
 
+def runtime_audio_imports():
+    # Runtime resolution must receive the same export coverage as ELF imports.
+    # Read the production NIDs so a backend change cannot silently stale this
+    # check. SceAudio is resolved at capture start because it may load after us.
+    definitions = {}
+    for line in (REPO / 'src/audio.c').read_text().splitlines():
+        fields = line.split()
+        if len(fields) == 3 and fields[0] == '#define' and fields[1].startswith('SCE_AUDIO_') and fields[1].endswith('_NID'):
+            definitions[fields[1]] = int(fields[2], 0)
+    library = definitions.pop('SCE_AUDIO_FOR_DRIVER_NID')
+    assert len(definitions) == 4, 'Update the runtime audio export check for the new backend'
+    return [(name, library, nid) for name, nid in definitions.items()]
+
+
 def verify(kd, dll, builds, hardware, version):
     modules = {}
     exports = {}
@@ -174,8 +188,13 @@ def verify(kd, dll, builds, hardware, version):
                 hardware, version, label, name, hex(library), hex(function))
             checked += 1
         imports_verified[label] = checked
+    dynamic = runtime_audio_imports()
+    for name, library, function in dynamic:
+        assert (library, function) in exports, (
+            hardware, version, name, hex(library), hex(function))
     return {'hardware': hardware, 'firmware': version, 'modules': modules,
-            'imports_verified': imports_verified, 'device_tested': False}
+            'imports_verified': imports_verified,
+            'runtime_audio_exports_verified': len(dynamic), 'device_tested': False}
 
 
 def run(args, dll):

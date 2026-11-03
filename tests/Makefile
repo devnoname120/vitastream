@@ -5,13 +5,42 @@ BUILD_DIR ?= .build
 
 .PHONY: test clean
 
-test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/shutdown $(BUILD_DIR)/pacing $(BUILD_DIR)/firmware $(BUILD_DIR)/startup
+test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/video-kernel-pool $(BUILD_DIR)/shutdown $(BUILD_DIR)/pacing $(BUILD_DIR)/firmware $(BUILD_DIR)/startup $(BUILD_DIR)/conversion $(BUILD_DIR)/usb-recovery $(BUILD_DIR)/usb-start $(BUILD_DIR)/audio-backend
 	$(BUILD_DIR)/video-double
 	$(BUILD_DIR)/video-single
+	$(BUILD_DIR)/video-kernel-pool
 	$(BUILD_DIR)/shutdown
 	$(BUILD_DIR)/pacing
 	$(BUILD_DIR)/firmware
 	$(BUILD_DIR)/startup
+	$(BUILD_DIR)/conversion
+	$(BUILD_DIR)/usb-recovery
+	$(BUILD_DIR)/usb-start
+	$(BUILD_DIR)/audio-backend
+
+$(BUILD_DIR)/usb-start.inc: ../src/main.c extract_capture.py | $(BUILD_DIR)
+	python3 extract_capture.py --usb-start ../src/main.c $@
+
+$(BUILD_DIR)/usb-start: test_usb_start.c $(BUILD_DIR)/usb-start.inc | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -I$(BUILD_DIR) test_usb_start.c -o $@
+
+$(BUILD_DIR)/audio-backend.inc: ../src/audio.c extract_capture.py | $(BUILD_DIR)
+	python3 extract_capture.py --audio-backend ../src/audio.c $@
+
+$(BUILD_DIR)/audio-backend: test_audio_backend.c ../include/uac.h $(BUILD_DIR)/audio-backend.inc | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -I../include -I$(BUILD_DIR) test_audio_backend.c -o $@
+
+$(BUILD_DIR)/usb-recovery.inc: ../src/main.c extract_capture.py | $(BUILD_DIR)
+	python3 extract_capture.py --usb-recovery ../src/main.c $@
+
+$(BUILD_DIR)/usb-recovery: test_usb_recovery.c $(BUILD_DIR)/usb-recovery.inc | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -I$(BUILD_DIR) test_usb_recovery.c -o $@
+
+$(BUILD_DIR)/conversion.inc: ../src/main.c extract_capture.py | $(BUILD_DIR)
+	python3 extract_capture.py --conversion ../src/main.c $@
+
+$(BUILD_DIR)/conversion: test_conversion.c $(BUILD_DIR)/conversion.inc | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -I$(BUILD_DIR) test_conversion.c -o $@
 
 $(BUILD_DIR)/startup.inc: ../src/main.c extract_capture.py | $(BUILD_DIR)
 	python3 extract_capture.py --startup ../src/main.c $@
@@ -48,6 +77,9 @@ $(BUILD_DIR)/video-double: test_video.c ../src/video.c ../include/video.h ../inc
 
 $(BUILD_DIR)/video-single: test_video.c ../src/video.c ../include/video.h ../include/uvc.h $(BUILD_DIR)/capture.inc $(wildcard stubs/*.h stubs/psp2kern/*.h stubs/psp2kern/kernel/*.h) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SANITIZERS) -Istubs -I../include -I$(BUILD_DIR) -DUVC_FRAMEBUFFER_COUNT=1 test_video.c ../src/video.c -o $@
+
+$(BUILD_DIR)/video-kernel-pool: test_video.c ../src/video.c ../include/video.h ../include/uvc.h $(BUILD_DIR)/capture.inc $(wildcard stubs/*.h stubs/psp2kern/*.h stubs/psp2kern/kernel/*.h) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -Istubs -I../include -I$(BUILD_DIR) -DUVC_FRAMEBUFFER_COUNT=1 -DUVC_VIDEO_KERNEL_POOL test_video.c ../src/video.c -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)

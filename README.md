@@ -37,6 +37,29 @@ audio reports and remaining application checks.
 The [retail verification report](docs/retail-validation-2026-11-03.md) records
 the confirmed 3.60 video/audio result and its testing limits.
 
+During USB audio capture with `speakers=on`, the data flow is:
+
+```mermaid
+flowchart TD
+    MIX["SrcMix1 MAIN<br/>already-mixed digital audio"]
+    CAP["Capture buffers in RAM"]
+    LOCAL["Local playback buffer"]
+    I2S["I2S → codec → speakers/headphones"]
+    RING["USB audio ring buffer"]
+    PACKET["USB packet buffers"]
+    PC["PC"]
+
+    MIX -->|"DMA managed by Sony SceAudio"| CAP
+    CAP -->|"CPU copy"| LOCAL
+    LOCAL -->|"Our separate DMA operation"| I2S
+    CAP -->|"CPU copy"| RING
+    RING -->|"CPU copy into 1 ms packets"| PACKET
+    PACKET -->|"USB controller DMA"| PC
+```
+
+The monitor interface lets SceAudio manage the mixer-to-RAM DMA transfer.
+CPU copies between the RAM buffers are shown explicitly.
+
 Unlike audio-capture plugins that hook individual audio ports as they are
 opened and closed (BGM, sound effects, and similar sources), this plugin
 captures the already-combined final digital mix immediately before it is

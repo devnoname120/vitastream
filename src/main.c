@@ -1068,6 +1068,8 @@ err_return:
 
 int module_stop(SceSize argc, const void *args)
 {
+	if (uac_audio_prepare_unload() < 0)
+		return SCE_KERNEL_STOP_FAIL;
 	uac_audio_begin_shutdown();
 	if (uac_audio_stop_sync() < 0)
 		return SCE_KERNEL_STOP_FAIL;

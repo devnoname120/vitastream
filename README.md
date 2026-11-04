@@ -19,11 +19,19 @@ The [hardware color space converter](https://wiki.henkaku.xyz/vita/IFTU_Register
 controller directly performs a DMA transfer from the physical address of the resulting converted framebuffer, and therefore, saving CPU usage and power consumption.
 
 Audio is exposed to the computer as a USB Audio Class 1.0 capture/input device
-using 48 kHz, stereo, signed 16-bit PCM. Version 2.2 uses SceAudio's
+using 48 kHz, stereo, signed 16-bit PCM. Version 2.3 uses SceAudio's
 firmware-owned monitor on SourceMixer1 MAIN, restoring the capture path used in
 1.9 for system, PSP and application audio. The firmware manages capture DMA
 and its completion fence. The tap precedes the codec's analog volume and mute
 settings. It does not capture the microphone.
+
+Version 2.3 fixes PS1 audio crackling and capture stopping after launching
+Everybody's Golf. It keeps Sony's upstream mixer forwarding active and holds
+ordinary routing resets while capture owns the audio paths. When capture
+stops, each path uses its latest accepted restoration request, with the
+pre-capture mode as a fallback; newer owners keep their configuration.
+See the [PS1 audio investigation](docs/ps1-audio-2026-11-04.md) and
+[Everybody's Golf investigation](docs/everybodys-golf-audio-2026-11-04.md).
 
 By default, local speaker/headphone playback remains enabled during USB audio
 capture. The `speakers=on` option enables experimental DMA forwarding of the same
@@ -101,7 +109,7 @@ coverage matrix and validation commands.
 
 **Download**:
 
-* [Version 2.2 downloads](https://github.com/devnoname120/vitastream/releases/tag/v2.2)
+* [Version 2.3 downloads](https://github.com/devnoname120/vitastream/releases/tag/v2.3)
 
 Use `vitastream.skprx` for normal operation. The plugin creates
 `ur0:/tai/vitastream.cfg` on startup if it is missing, with the local screen and
@@ -110,6 +118,8 @@ an example.
 `vitastream_diagnostic.skprx` adds logging for troubleshooting. Install only one
 plugin variant. Use `screen=off` in the configuration to disable either an OLED
 or LCD panel during capture; both builds support this setting.
+The audio routing hook remains resident once installed; reboot when replacing
+or removing the plugin.
 
 Releases published before the rename contain `udcd_uvc.skprx`. Rename that
 downloaded file to `vitastream.skprx` to use the installation paths below.
@@ -126,7 +136,7 @@ previous one; only one USB video request is queued at a time. A buffer is not
 reused or freed until its request completes, including after cancellation.
 All five video modes and the USB audio path are retained.
 
-The version 2.2 release downloads use `VIDEO_KERNEL_POOL=1`, the bounded
+The version 2.3 release downloads use `VIDEO_KERNEL_POOL=1`, the bounded
 single-buffer configuration tested on the retail Vita. This keeps video
 allocation outside the application's PhyCont pool and sacrifices conversion/
 transmission overlap. To reproduce all release variants with VitaSDK:
@@ -177,10 +187,11 @@ still probing, and a new COMMIT resets the pacing phase.
 make test
 ```
 
-The tests require Python 3 and a native C compiler supporting AddressSanitizer
-and UndefinedBehaviorSanitizer. They exercise the production video transport,
+The tests require Python 3, POSIX threads and a native C compiler supporting
+AddressSanitizer and UndefinedBehaviorSanitizer. They exercise the production video transport,
 capture scheduling, source references, USB recovery, audio backend and shutdown
-path with simulated firmware/kernel/USB dependencies.
+path with simulated firmware/kernel/USB dependencies, including audio route
+ownership and concurrent routing requests during capture cleanup.
 They do not replace device tests of IFTU, USB timing, or simultaneous audio.
 
 ### Configuration

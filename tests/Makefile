@@ -5,7 +5,7 @@ BUILD_DIR ?= .build
 
 .PHONY: test clean
 
-test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/video-kernel-pool $(BUILD_DIR)/shutdown $(BUILD_DIR)/pacing $(BUILD_DIR)/firmware $(BUILD_DIR)/startup $(BUILD_DIR)/conversion $(BUILD_DIR)/usb-recovery $(BUILD_DIR)/usb-start $(BUILD_DIR)/audio-backend $(BUILD_DIR)/config $(BUILD_DIR)/settings-oled $(BUILD_DIR)/settings-lcd $(BUILD_DIR)/audio-relay
+test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/video-kernel-pool $(BUILD_DIR)/shutdown $(BUILD_DIR)/pacing $(BUILD_DIR)/firmware $(BUILD_DIR)/startup $(BUILD_DIR)/conversion $(BUILD_DIR)/usb-recovery $(BUILD_DIR)/usb-start $(BUILD_DIR)/audio-backend $(BUILD_DIR)/config $(BUILD_DIR)/settings-oled $(BUILD_DIR)/settings-lcd $(BUILD_DIR)/audio-relay $(BUILD_DIR)/audio-route
 	$(BUILD_DIR)/video-double
 	$(BUILD_DIR)/video-single
 	$(BUILD_DIR)/video-kernel-pool
@@ -21,6 +21,10 @@ test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/video-ker
 	$(BUILD_DIR)/settings-oled
 	$(BUILD_DIR)/settings-lcd
 	$(BUILD_DIR)/audio-relay
+	$(BUILD_DIR)/audio-route
+
+$(BUILD_DIR)/audio-route: test_audio_route.c ../src/audio_route.c ../include/audio_route.h stubs/taihen.h stubs/psp2kern/kernel/threadmgr/fast_mutex.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -pthread -Istubs -I../include test_audio_route.c -o $@
 
 $(BUILD_DIR)/audio-relay: test_audio_relay.c ../src/audio_relay.c ../include/audio_relay.h ../include/firmware.h stubs/psp2kern/kernel/dmac.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SANITIZERS) -Istubs -I../include test_audio_relay.c ../src/audio_relay.c -o $@
@@ -43,8 +47,8 @@ $(BUILD_DIR)/usb-start: test_usb_start.c $(BUILD_DIR)/usb-start.inc | $(BUILD_DI
 $(BUILD_DIR)/audio-backend.inc: ../src/audio.c extract_capture.py | $(BUILD_DIR)
 	python3 extract_capture.py --audio-backend ../src/audio.c $@
 
-$(BUILD_DIR)/audio-backend: test_audio_backend.c ../include/uac.h $(BUILD_DIR)/audio-backend.inc | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(SANITIZERS) -I../include -I$(BUILD_DIR) test_audio_backend.c -o $@
+$(BUILD_DIR)/audio-backend: test_audio_backend.c ../include/uac.h ../src/audio_route.c ../include/audio_route.h stubs/psp2kern/kernel/threadmgr/fast_mutex.h $(BUILD_DIR)/audio-backend.inc | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -pthread -Istubs -I../include -I$(BUILD_DIR) test_audio_backend.c -o $@
 
 $(BUILD_DIR)/usb-recovery.inc: ../src/main.c extract_capture.py | $(BUILD_DIR)
 	python3 extract_capture.py --usb-recovery ../src/main.c $@

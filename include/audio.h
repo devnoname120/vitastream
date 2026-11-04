@@ -12,5 +12,6 @@ void uac_audio_on_attach(void);
 int uac_audio_is_active(void);
 void uac_audio_diagnostic_state(void);
 int uac_audio_term(void);
+int uac_audio_prepare_unload(void);
 
 #endif

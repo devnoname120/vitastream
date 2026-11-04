@@ -17,9 +17,11 @@ enum { AUDIO_STOP, JOIN, SCREEN_RESTORE, VIDEO_RELEASE, UNREGISTER, VIDEO_TERM, 
 static struct {
 	int fail_at, registered, unregisters, event_deleted, thread_deleted, hook_released;
 	int joined, released, video_dead, audio_dead;
+	int guard_published;
 } state;
 
 static int result(int stage) { return state.fail_at == stage ? -77 : 0; }
+static int uac_audio_prepare_unload(void) {return state.guard_published ? -88 : 0;}
 static void uac_audio_begin_shutdown(void) {}
 static int uac_audio_stop_sync(void) { return result(AUDIO_STOP); }
 static int vitastream_screen_restore(void) { assert(state.joined); return result(SCREEN_RESTORE); }
@@ -90,6 +92,10 @@ static int taiHookReleaseForKernel(SceUID id, int ref)
 
 int main(void)
 {
+	state.guard_published = 1;
+	uvc_thread_run = 1;
+	assert(module_stop(0, NULL) == SCE_KERNEL_STOP_FAIL);
+	assert(uvc_thread_run && !state.joined && !state.event_deleted);
 	for (int stage = AUDIO_TERM; stage >= -1; stage--) {
 		memset(&state, 0, sizeof(state));
 		g_udcd_config_hook_uid = 22;

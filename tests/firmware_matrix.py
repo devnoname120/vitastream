@@ -253,7 +253,8 @@ def run(args, dll):
                 record['source'], name, 'different tool executable code')
     source_hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest()
                      for name in ('src/main.c', 'src/audio.c', 'src/firmware.c',
-                                  'src/audio_relay.c', 'src/config.c', 'src/settings.c',
+                                  'src/audio_relay.c', 'src/audio_route.c', 'src/config.c', 'src/settings.c',
+                                  'include/audio_route.h',
                                   'include/audio_relay.h', 'include/config.h', 'include/settings.h',
                                   'include/firmware.h', 'include/firmware_profiles.h')}
     return {'verified': records, 'unavailable': unavailable,

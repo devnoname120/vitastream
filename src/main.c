@@ -832,6 +832,7 @@ static int uvc_thread(SceSize args, void *argp)
 		if (ret == 0 && stream) {
 			static int last_error;
 			ret = send_frame();
+			uvc_video_finish_frame();
 			video_progress = ret >= 0;
 			if (ret < 0 && ret != last_error) {
 				LOG("Error processing NV12 frame: 0x%08X\n", ret);
@@ -1018,6 +1019,7 @@ int module_start(SceSize argc, const void *args)
 	}
 
 	ret = uvc_video_init(&endpoints[1]);
+	uvc_video_set_wake_event(uvc_event_flag_id);
 	diagnostic_record("uvc_video_init", ret);
 	if (ret < 0)
 		goto err_delete_event_flag;
@@ -1068,6 +1070,8 @@ err_return:
 
 int module_stop(SceSize argc, const void *args)
 {
+	if (uvc_video_prepare_unload() < 0)
+		return SCE_KERNEL_STOP_FAIL;
 	if (uac_audio_prepare_unload() < 0)
 		return SCE_KERNEL_STOP_FAIL;
 	uac_audio_begin_shutdown();

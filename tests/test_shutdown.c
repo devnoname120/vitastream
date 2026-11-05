@@ -22,6 +22,7 @@ static struct {
 
 static int result(int stage) { return state.fail_at == stage ? -77 : 0; }
 static int uac_audio_prepare_unload(void) {return state.guard_published ? -88 : 0;}
+static int uvc_video_prepare_unload(void) {return 0;}
 static void uac_audio_begin_shutdown(void) {}
 static int uac_audio_stop_sync(void) { return result(AUDIO_STOP); }
 static int vitastream_screen_restore(void) { assert(state.joined); return result(SCREEN_RESTORE); }

@@ -107,7 +107,8 @@ static void test_config_creation(void)
 {
 	vitastream_settings_load();
 	assert(vitastream_settings_speakers_on());
-	assert(!strcmp(mock.created, "screen=on\nspeakers=on\n"));
+	assert(!vitastream_settings_lowmemory_on());
+	assert(!strcmp(mock.created, "screen=on\nspeakers=on\nlowmemory=off\n"));
 	assert(mock.creates == 1 && mock.writes == 1 && mock.create_closes == 1);
 	assert(!mock.reads && !mock.closes);
 	vitastream_settings_load();
@@ -116,7 +117,7 @@ static void test_config_creation(void)
 	memset(&mock, 0, sizeof(mock));
 	mock.write_limit = 3;
 	vitastream_settings_load();
-	assert(!strcmp(mock.created, "screen=on\nspeakers=on\n"));
+	assert(!strcmp(mock.created, "screen=on\nspeakers=on\nlowmemory=off\n"));
 	assert(mock.writes > 1 && mock.create_closes == 1);
 
 	memset(&mock, 0, sizeof(mock));
@@ -140,9 +141,15 @@ static void test_config_creation(void)
 	vitastream_settings_load();
 	assert(!vitastream_settings_speakers_on() && !mock.creates && !mock.writes);
 	assert(!strcmp(mock.text, "screen=off\nspeakers=off\n"));
+	assert(!vitastream_settings_lowmemory_on()); /* older config retains default */
+	mock.text = "screen=off\nspeakers=off\nlowmemory=on\n";
+	vitastream_settings_load();
+	assert(vitastream_settings_lowmemory_on() && !mock.creates && !mock.writes);
+	mock.text = "screen=off\nspeakers=off\n";
 	mock.fail_read = 1;
 	vitastream_settings_load();
 	assert(vitastream_settings_speakers_on() && !mock.creates && !mock.writes);
+	assert(!vitastream_settings_lowmemory_on());
 	mock.fail_open = 1;
 	vitastream_settings_load();
 	assert(vitastream_settings_speakers_on() && mock.creates == 1 && !mock.writes);

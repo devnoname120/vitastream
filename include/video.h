@@ -26,6 +26,9 @@ struct uvc_video_buffer {
 };
 
 int uvc_video_init(SceUdcdEndpoint *endpoint);
+void uvc_video_set_wake_event(SceUID event);
+void uvc_video_finish_frame(void);
+int uvc_video_prepare_unload(void);
 int uvc_video_prepare(unsigned int frame_size, struct uvc_video_buffer *buffer);
 int uvc_video_wait(void);
 int uvc_video_submit(int fid);

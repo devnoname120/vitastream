@@ -19,11 +19,18 @@ endif
 
 ifeq ($(PARALLEL), 0)
 	CFLAGS	+= -DUVC_FRAMEBUFFER_COUNT=1
+	VIDEO_CAMERA_BORROW ?= 0
+else
+	VIDEO_CAMERA_BORROW ?= 1
 endif
 
-# Issue #4 comparison build: leave the application's PhyCont pool untouched.
-# Keep this opt-in and bounded to one buffer; ordinary kernel memory is finite.
-ifeq ($(VIDEO_KERNEL_POOL), 1)
+# Normal builds keep one kernel buffer and optionally borrow Camera's backing.
+# lowmemory=on disables borrowing at runtime. Unknown layouts use one buffer.
+ifeq ($(VIDEO_CAMERA_BORROW), 1)
+	OBJS += src/video_camera.o
+	CFLAGS += -DUVC_VIDEO_CAMERA_BORROW -DUVC_VIDEO_KERNEL_POOL -DUVC_FRAMEBUFFER_COUNT=2
+else ifeq ($(VIDEO_KERNEL_POOL), 1)
+# Legacy comparison build: VIDEO_CAMERA_BORROW=0 VIDEO_KERNEL_POOL=1.
 	CFLAGS	+= -DUVC_VIDEO_KERNEL_POOL -DUVC_FRAMEBUFFER_COUNT=1
 endif
 

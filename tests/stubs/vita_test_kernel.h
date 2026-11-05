@@ -56,6 +56,7 @@ SceUID ksceKernelCreateEventFlag(const char *name, unsigned int attr,
 int ksceKernelDeleteEventFlag(SceUID id);
 int ksceKernelSetEventFlag(SceUID id, unsigned int bits);
 int ksceKernelDelayThread(SceUInt32 microseconds);
+uint64_t ksceKernelGetSystemTimeWide(void);
 int ksceKernelWaitEventFlagCB(SceUID id, unsigned int bits,
 	unsigned int mode, unsigned int *out, SceUInt32 *timeout);
 SceUID ksceKernelAllocMemBlock(const char *name, SceKernelMemBlockType type,

@@ -130,38 +130,36 @@ downloaded file to `vitastream.skprx` to use the installation paths below.
 
 ### Video pipeline
 
-The default source build uses two dynamically sized conversion buffers. The existing
-video worker can convert the next frame while the USB controller transmits the
-previous one; only one USB video request is queued at a time. A buffer is not
-reused or freed until its request completes, including after cancellation.
-All five video modes and the USB audio path are retained.
+The current source build keeps one owned kernel conversion buffer and, with
+`lowmemory=off` (the default), borrows idle SceCamera backing for a second
+buffer. The worker can convert the next frame while USB transmits the previous
+one; only one USB video request is queued at a time. A buffer is not reused or
+returned until its DMA completes, including after cancellation. No additional
+framebuffer is allocated from the game's or shared PhyCont budgets.
 
-The version 2.3 release downloads use `VIDEO_KERNEL_POOL=1`, the bounded
-single-buffer configuration tested on the retail Vita. This keeps video
-allocation outside the application's PhyCont pool and sacrifices conversion/
-transmission overlap. To reproduce all release variants with VitaSDK:
+`lowmemory=on` uses only the first buffer and skips camera borrowing and its
+hooks. Unknown camera layouts or unavailable backing also retain one-buffer
+capture. The borrowing backend is currently guarded for the verified retail
+3.60 Camera/Sysmem layout. Any camera app or game can reclaim its memory;
+capture falls back to one buffer and retries once per second after the driver
+becomes idle. See the [camera buffering notes](docs/video-camera-borrow.md) for
+ownership checks, recovery and hardware-test coverage.
+
+Use 960x544 on the tested retail setup. Its first buffer needs 1 MiB of physical
+kernel backing. A 1280x720 selection needs 2 MiB, which did not fit in the
+measured kernel pool; borrowing the second buffer does not fix the first
+allocation. All advertised video modes and USB audio are retained.
+
+The published version 2.3 downloads use a single kernel buffer. Camera-backed
+buffering is newer source work. To build the current normal and diagnostic
+variants with VitaSDK:
 
 ```sh
 ./gen_builds.sh builds/release
 ```
 
-Video buffers use the kernel's physically contiguous, non-cacheable pool rather
-than consuming the ordinary kernel-driver pool needed during application startup.
-If the second buffer cannot be allocated, capture falls back to one buffer. If
-the first allocation fails, the frame is skipped; neither case falls back to
-kernel-driver memory. The physical-contiguous pool is still a finite shared
-resource. See the [issue #3 investigation](docs/issue-3-memory.md) for the firmware
-evidence and device-validation limits.
-For a deliberately single-buffer build, use:
-
-```sh
-make clean
-make PARALLEL=0
-```
-
-Run `make clean` before switching build options. The second buffer uses an
-additional 768 KiB at 960x544, or 1352 KiB at 1280x720, while allocated.
-Idle capture releases its buffers. Overlap does not increase USB bandwidth;
+Run `make clean` before switching build options. Idle capture releases the
+owned buffer and returns any borrowed camera memory. Overlap does not increase USB bandwidth;
 its effect depends on the selected mode and host. See the
 [hardware test report](docs/performance-2026-09-19.md) for measured capture rates
 and the remaining testing limits. The overlap is adapted from
@@ -197,11 +195,12 @@ They do not replace device tests of IFTU, USB timing, or simultaneous audio.
 ### Configuration
 
 The plugin automatically creates `ur0:/tai/vitastream.cfg` on startup when it
-is missing. Both options default to on:
+is missing. Screen and speakers default to on; low-memory mode defaults to off:
 
 ```ini
 screen=on
 speakers=on
+lowmemory=off
 ```
 
 - `screen=off` turns off the local OLED/LCD panel while the host captures video
@@ -213,11 +212,16 @@ speakers=on
   than a software mixer or resampler. The retail 3.60 speaker path has been
   tested; wider hardware and firmware validation remains experimental.
   `speakers=off` retains the existing USB-only audio path.
+- `lowmemory=on` uses one video buffer and disables camera-memory borrowing.
+  `lowmemory=off` enables the optional second buffer, with automatic fallback
+  and recovery when another app uses the camera. `1` and `0` are also accepted
+  for this option.
 
 The file is read on plugin startup; reboot after editing it. `#` and `;` start
 comments. Keys and `on`/`off` values are case-insensitive. Existing files are
-preserved. An unreadable or invalid file uses the defaults: screen on and local
-playback on. The same defaults apply if the file cannot be created.
+preserved. Files without `lowmemory` use its default of off. An unreadable or
+invalid file uses the defaults: screen on, local playback on, low-memory mode
+off. The same defaults apply if the file cannot be created.
 
 **Installation**:
 

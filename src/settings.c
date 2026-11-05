@@ -17,7 +17,7 @@ struct panel_api {
 	int (*set_brightness)(int value);
 };
 
-static struct vitastream_config config = {1, 1};
+static struct vitastream_config config = {1, 1, 0};
 static struct panel_api panel;
 static int panel_resolved;
 static int panel_owned;
@@ -59,7 +59,7 @@ static int resolve_active_panel(void)
 
 static void create_default_config(void)
 {
-	static const char text[] = "screen=on\nspeakers=on\n";
+	static const char text[] = "screen=on\nspeakers=on\nlowmemory=off\n";
 	size_t length = sizeof(text) - 1, written = 0;
 	/* An unsuccessful read must never truncate an existing configuration,
 	 * including one created between the read and this exclusive open. */
@@ -103,11 +103,17 @@ void vitastream_settings_load(void)
 	}
 	diagnostic_record("config screen on", config.screen_on);
 	diagnostic_record("config local speakers on", config.speakers_on);
+	diagnostic_record("config lowmemory on", config.lowmemory_on);
 }
 
 int vitastream_settings_speakers_on(void)
 {
 	return config.speakers_on;
+}
+
+int vitastream_settings_lowmemory_on(void)
+{
+	return config.lowmemory_on;
 }
 
 int vitastream_screen_restore(void)

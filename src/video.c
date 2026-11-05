@@ -4,6 +4,9 @@
 #include <string.h>
 #include "uvc.h"
 #include "video.h"
+#include "video_camera.h"
+#include "settings.h"
+#include "diagnostic.h"
 
 #ifndef UVC_FRAMEBUFFER_COUNT
 #define UVC_FRAMEBUFFER_COUNT 2
@@ -11,12 +14,13 @@
 #if UVC_FRAMEBUFFER_COUNT != 1 && UVC_FRAMEBUFFER_COUNT != 2
 #error UVC_FRAMEBUFFER_COUNT must be 1 or 2
 #endif
-#if defined(UVC_VIDEO_KERNEL_POOL) && UVC_FRAMEBUFFER_COUNT != 1
+#if defined(UVC_VIDEO_KERNEL_POOL) && !defined(UVC_VIDEO_CAMERA_BORROW) && UVC_FRAMEBUFFER_COUNT != 1
 #error The kernel-pool comparison build must use one video buffer
 #endif
 
 static struct {
 	SceUID uid;
+	int borrowed;
 	struct uvc_video_buffer buffer;
 } slots[UVC_FRAMEBUFFER_COUNT] = {
 	{ .uid = -1 },
@@ -33,6 +37,30 @@ static unsigned int buffer_count;
 static unsigned int next_buffer;
 static int pending;
 static int prepared;
+static unsigned int pending_slot;
+#ifdef UVC_VIDEO_CAMERA_BORROW
+static uint64_t camera_retry_at;
+#endif
+
+void uvc_video_set_wake_event(SceUID event)
+{
+	video_camera_set_wake_event(event);
+}
+
+int uvc_video_prepare_unload(void)
+{
+	return video_camera_prepare_unload();
+}
+
+void uvc_video_finish_frame(void)
+{
+#ifdef UVC_VIDEO_CAMERA_BORROW
+	/* Also runs after conversion errors and all pre-submit early returns. */
+	if (!(pending && slots[pending_slot].borrowed))
+		video_camera_release();
+#endif
+	prepared = 0;
+}
 
 static void transfer_complete(SceUdcdDeviceRequest *req)
 {
@@ -68,6 +96,10 @@ int uvc_video_wait(void)
 		return ret;
 
 	pending = 0;
+#ifdef UVC_VIDEO_CAMERA_BORROW
+	if (slots[pending_slot].borrowed)
+		video_camera_release();
+#endif
 	return request.returnCode;
 }
 
@@ -75,6 +107,12 @@ static int free_slot(unsigned int slot)
 {
 	int ret;
 
+	if (slots[slot].borrowed) {
+		/* The UID belongs to SceCamera; never pass it to FreeMemBlock. */
+		slots[slot].borrowed = 0;
+		memset(&slots[slot].buffer, 0, sizeof(slots[slot].buffer));
+		return 0;
+	}
 	if (slots[slot].uid < 0)
 		return 0;
 
@@ -94,8 +132,12 @@ int uvc_video_release(void)
 
 	if (pending)
 		return ret;
+	uvc_video_finish_frame();
 
 	allocated_size = buffer_count = next_buffer = 0;
+#ifdef UVC_VIDEO_CAMERA_BORROW
+	camera_retry_at = 0;
+#endif
 	prepared = 0;
 	for (unsigned int i = 0; i < UVC_FRAMEBUFFER_COUNT; i++) {
 		ret = free_slot(i);
@@ -111,11 +153,28 @@ static int allocate_slot(unsigned int slot, unsigned int frame_size)
 	unsigned int size = (offsetof(struct uvc_frame, data) + frame_size + 4095u) & ~4095u;
 	int ret;
 
+#ifdef UVC_VIDEO_CAMERA_BORROW
+	if (slot) {
+		if (vitastream_settings_lowmemory_on())
+			return -1;
+		ret = video_camera_acquire(size, &slots[slot].buffer);
+		if (ret < 0) {
+			camera_retry_at = ksceKernelGetSystemTimeWide() + 1000000;
+			return ret;
+		}
+		slots[slot].borrowed = 1;
+		video_camera_release();
+		return 0;
+	}
+#endif
 	memset(&opt, 0, sizeof(opt));
 	opt.size = sizeof(opt);
 	opt.attr = SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_PHYCONT |
 		SCE_KERNEL_ALLOC_MEMBLOCK_ATTR_HAS_ALIGNMENT;
 	opt.alignment = 4096;
+#ifdef UVC_VIDEO_CAMERA_BORROW
+	diagnostic_record("owned video allocation requested bytes", size);
+#endif
 	/* The optional issue #4 comparison uses one bounded kernel buffer so an
 	 * application can request the entire shared PhyCont pool. Neither policy
 	 * falls back to the other pool on failure. */
@@ -136,6 +195,22 @@ static int allocate_slot(unsigned int slot, unsigned int frame_size)
 		free_slot(slot);
 	return ret;
 }
+
+#ifdef UVC_VIDEO_CAMERA_BORROW
+static int camera_fallback(void)
+{
+	int ret = uvc_video_wait();
+	if (pending)
+		return ret;
+	video_camera_release();
+	free_slot(1);
+	buffer_count = 1;
+	next_buffer = 0;
+	camera_retry_at = ksceKernelGetSystemTimeWide() + 1000000;
+	diagnostic_record("video camera fallback buffers", 1);
+	return 0;
+}
+#endif
 
 int uvc_video_prepare(unsigned int frame_size, struct uvc_video_buffer *buffer)
 {
@@ -163,8 +238,37 @@ int uvc_video_prepare(unsigned int frame_size, struct uvc_video_buffer *buffer)
 			buffer_count++;
 		}
 		allocated_size = frame_size;
+		diagnostic_record("video allocated buffers", (int)buffer_count);
 	}
 
+#ifdef UVC_VIDEO_CAMERA_BORROW
+	int acquired = 0;
+	unsigned int size = (offsetof(struct uvc_frame, data) + frame_size + 4095u) & ~4095u;
+	if (buffer_count == 2 && video_camera_revoked()) {
+		ret = camera_fallback();
+		if (ret < 0)
+			return ret;
+	}
+	if (buffer_count == 1 && !vitastream_settings_lowmemory_on() &&
+	    ksceKernelGetSystemTimeWide() >= camera_retry_at) {
+		camera_retry_at = ksceKernelGetSystemTimeWide() + 1000000;
+		if (video_camera_acquire(size, &slots[1].buffer) == 0) {
+			slots[1].borrowed = 1;
+			buffer_count = 2;
+			/* The owned first buffer may still be in USB. Convert into the
+			 * newly acquired second buffer while that request completes. */
+			next_buffer = 1;
+			acquired = 1;
+			diagnostic_record("video camera recovered buffers", 2);
+		}
+	}
+	if (buffer_count == 2 && next_buffer == 1 && !acquired &&
+	    video_camera_acquire(size, &slots[1].buffer) < 0) {
+		ret = camera_fallback();
+		if (ret < 0)
+			return ret;
+	}
+#endif
 	if (buffer_count == 1) {
 		ret = uvc_video_wait();
 		if (ret < 0)
@@ -185,6 +289,12 @@ int uvc_video_submit(int fid)
 		return SCE_UDCD_ERROR_DRIVER_IN_PROGRESS;
 	if (!prepared || completion_event < 0)
 		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
+#ifdef UVC_VIDEO_CAMERA_BORROW
+	if (slots[next_buffer].borrowed && video_camera_revoked()) {
+		uvc_video_finish_frame();
+		return SCE_UDCD_ERROR_DRIVER_IN_PROGRESS;
+	}
+#endif
 
 	frame = slots[next_buffer].buffer.frame;
 	memset(frame->header, 0, sizeof(frame->header));
@@ -199,11 +309,25 @@ int uvc_video_submit(int fid)
 	};
 
 	pending = 1;
+	pending_slot = next_buffer;
 	ret = ksceUdcdReqSend(&request);
 	if (ret < 0) {
 		pending = 0;
 		return ret;
 	}
+#ifdef UVC_VIDEO_CAMERA_BORROW
+	if (slots[next_buffer].borrowed) {
+		static int logged;
+		if (!logged) {
+			diagnostic_record("video camera buffer queued to USB", 1);
+			logged = 1;
+		}
+		/* Close revoke versus enqueue: the pre-submit cancellation may have
+		 * run before the request became visible to the USB driver. */
+		if (video_camera_revoked())
+			uvc_video_cancel();
+	}
+#endif
 
 	prepared = 0;
 	next_buffer = (next_buffer + 1) % buffer_count;

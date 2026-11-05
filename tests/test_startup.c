@@ -97,6 +97,8 @@ static int ksceKernelDeleteThread(SceUID id)
 	assert(id == 20 && thread && !event); thread = 0; return 0;
 }
 
+static void uvc_video_set_wake_event(SceUID event) { (void)event; }
+
 #include "startup.inc"
 
 int main(void)

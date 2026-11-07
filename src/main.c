@@ -53,6 +53,8 @@
 /* Exported by the pinned SDK, but its older sysmem header omits this ABI. */
 int ksceKernelProcModeVAtoPA(SceUID pid, SceUInt32 permission,
 	const void *va, void **pa);
+int module_get_export_func(SceUID pid, const char *module_name,
+	uint32_t library_nid, uint32_t function_nid, uintptr_t *function);
 
 /* Compatibility copy of the corrected SceIftuPlaneState definition. */
 typedef struct SceIftuPlaneState_updated {
@@ -918,6 +920,78 @@ release_process:
 	return ret;
 }
 
+#define SCE_DISPLAY_FOR_DRIVER_NID 0x9FED47AC
+#define SCE_DISPLAY_GET_SCANLINE_NID 0x332C5410
+#define COMPAT_FRAME_WIDTH 480u
+#define COMPAT_FRAME_HEIGHT 272u
+#define COMPAT_FRAME_PITCH 512u
+#define COMPAT_CAPTURE_LINE_MIN 288
+#define COMPAT_CAPTURE_LINE_MAX 352
+#define COMPAT_CAPTURE_POLL_US 250u
+#define COMPAT_CAPTURE_POLL_LIMIT 80u
+
+typedef int (*DisplayGetScanlineFn)(int head);
+static DisplayGetScanlineFn g_display_get_scanline;
+
+static int capture_query_framebuffer(int head, SceDisplayFrameBufInfo *fb_info)
+{
+	int ret;
+
+	memset(fb_info, 0, sizeof(*fb_info));
+	fb_info->size = sizeof(*fb_info);
+	ret = ksceDisplayGetProcFrameBufInternal(-1, head, 0, fb_info);
+	if (ret < 0 || !fb_info->paddr) {
+		memset(fb_info, 0, sizeof(*fb_info));
+		fb_info->size = sizeof(*fb_info);
+		ret = ksceDisplayGetProcFrameBufInternal(-1, head, 1, fb_info);
+	}
+	if (ret < 0)
+		return ret;
+	return fb_info->paddr ? 0 : SCE_UDCD_ERROR_INVALID_ARGUMENT;
+}
+
+static int capture_is_compat_surface(const SceDisplayFrameBufInfo *fb_info)
+{
+	return fb_info->framebuf.width == COMPAT_FRAME_WIDTH &&
+	       fb_info->framebuf.height == COMPAT_FRAME_HEIGHT &&
+	       fb_info->framebuf.pitch == COMPAT_FRAME_PITCH;
+}
+
+static int capture_wait_compat_surface(int head,
+	const SceDisplayFrameBufInfo *fb_info)
+{
+	if (!capture_is_compat_surface(fb_info))
+		return 0;
+
+	if (!g_display_get_scanline) {
+		uintptr_t function = 0;
+		int ret = module_get_export_func(KERNEL_PID, "SceDisplay",
+			SCE_DISPLAY_FOR_DRIVER_NID, SCE_DISPLAY_GET_SCANLINE_NID,
+			&function);
+		if (ret < 0 || !function)
+			return 0;
+		g_display_get_scanline = (DisplayGetScanlineFn)function;
+	}
+
+	/* SceCompat rewrites its single 480x272 surface at the display boundary.
+	 * Sampling near the middle of the next scan avoids that mutable interval. */
+	for (unsigned int i = 0; i < COMPAT_CAPTURE_POLL_LIMIT; i++) {
+		if (!uvc_thread_run || !stream)
+			return 0;
+		int line = g_display_get_scanline(head);
+		if (line < 0)
+			return 0;
+		if (line >= COMPAT_CAPTURE_LINE_MIN && line < COMPAT_CAPTURE_LINE_MAX)
+			return 1;
+		if (i + 1 == COMPAT_CAPTURE_POLL_LIMIT)
+			break;
+		int ret = ksceKernelDelayThread(COMPAT_CAPTURE_POLL_US);
+		if (ret < 0)
+			return ret;
+	}
+	return (int)0x80028005;
+}
+
 static int send_frame(void)
 {
 	static int fid;
@@ -949,15 +1023,22 @@ static int send_frame(void)
 		return 0;
 
 	head = ksceDisplayGetPrimaryHead();
-	memset(&fb_info, 0, sizeof(fb_info));
-	fb_info.size = sizeof(fb_info);
-	ret = ksceDisplayGetProcFrameBufInternal(-1, head, 0, &fb_info);
-	if (ret < 0 || fb_info.paddr == 0)
-		ret = ksceDisplayGetProcFrameBufInternal(-1, head, 1, &fb_info);
+	ret = capture_query_framebuffer(head, &fb_info);
 	if (ret < 0)
 		return ret;
-	if (!fb_info.paddr)
-		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
+	ret = capture_wait_compat_surface(head, &fb_info);
+	if (ret < 0)
+		return ret;
+	if (!uvc_thread_run || !stream ||
+		frame_index != uvc_probe_control_setting.bFrameIndex ||
+		format_index != uvc_probe_control_setting.bFormatIndex)
+		return 0;
+	if (ret > 0) {
+		/* The producer may replace the surface while capture is phase-aligned. */
+		ret = capture_query_framebuffer(head, &fb_info);
+		if (ret < 0)
+			return ret;
+	}
 
 #ifdef DEBUG
 	time1 = ksceKernelGetSystemTimeWide();

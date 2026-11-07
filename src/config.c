@@ -23,6 +23,7 @@ void vitastream_config_defaults(struct vitastream_config *config)
 	config->screen_on = 1;
 	config->speakers_on = 1;
 	config->lowmemory_on = 0;
+	config->nosleep_on = 1;
 }
 
 int vitastream_config_parse(const char *text, size_t length,
@@ -66,10 +67,11 @@ int vitastream_config_parse(const char *text, size_t length,
 		value = separator + 1;
 		while (value < end && space(text[value])) value++;
 		int lowmemory = equal(text + start, key_end - start, "lowmemory");
+		int nosleep = equal(text + start, key_end - start, "nosleep");
 		if (equal(text + value, end - value, "on") ||
-		    (lowmemory && equal(text + value, end - value, "1"))) enabled = 1;
+		    ((lowmemory || nosleep) && equal(text + value, end - value, "1"))) enabled = 1;
 		else if (equal(text + value, end - value, "off") ||
-		    (lowmemory && equal(text + value, end - value, "0"))) enabled = 0;
+		    ((lowmemory || nosleep) && equal(text + value, end - value, "0"))) enabled = 0;
 		else return -1;
 		if (equal(text + start, key_end - start, "screen"))
 			parsed.screen_on = enabled;
@@ -77,6 +79,8 @@ int vitastream_config_parse(const char *text, size_t length,
 			parsed.speakers_on = enabled;
 		else if (lowmemory)
 			parsed.lowmemory_on = enabled;
+		else if (nosleep)
+			parsed.nosleep_on = enabled;
 		else
 			return -1;
 	}

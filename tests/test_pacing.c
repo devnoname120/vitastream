@@ -15,7 +15,7 @@ typedef struct {
 
 static struct uvc_streaming_control uvc_probe_control_setting;
 static struct { unsigned char buffer[64]; } pending_recv;
-static atomic_int stream;
+static atomic_int stream, uvc_usb_yielded;
 atomic_uint uvc_capture_interval;
 atomic_uint uvc_pacing_epoch;
 static int uvc_event_flag_id = 42;

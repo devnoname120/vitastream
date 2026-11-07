@@ -1105,9 +1105,10 @@ void uac_audio_request_stop(void)
 	if (!ksceKernelAtomicGetAndAdd32(&g_audio_initialized, 0))
 		return;
 
-	ksceKernelLockFastMutex(&g_audio_state_mutex);
-	audio_request_stop_locked();
-	ksceKernelUnlockFastMutex(&g_audio_state_mutex);
+	/* USB alternate-setting/detach callbacks cannot wait on a mutex. Signal
+	 * the same atomic transition used by worker failures; the control worker
+	 * rechecks its desired setting after a concurrent blocking start. */
+	audio_signal_failure();
 }
 
 int uac_audio_is_active(void)

@@ -143,6 +143,17 @@ def runtime_audio_imports():
     return [(name, library, nid) for name, nid in definitions.items()]
 
 
+def runtime_mtp_imports():
+    definitions = {}
+    for line in (REPO / 'src/main.c').read_text().splitlines():
+        fields = line.split()
+        if len(fields) == 3 and fields[0] == '#define' and fields[1].startswith('SCE_USB_MTP_') and fields[1].endswith('_NID'):
+            definitions[fields[1]] = int(fields[2], 0)
+    library = definitions.pop('SCE_USB_MTP_FOR_DRIVER_NID')
+    assert len(definitions) == 2, 'Update the runtime MTP export coverage'
+    return [('SceUsbMtp', library, nid) for nid in definitions.values()]
+
+
 def runtime_panel_imports():
     source = (REPO / 'src/settings.c').read_text()
     result = []
@@ -189,7 +200,7 @@ def verify(kd, dll, builds, hardware, version):
                          'text_size': len(firmware.text), 'data_size': data_size}
         exports.update(firmware.exports)
     for name in ('sysmem', 'threadmgr', 'modulemgr', 'display', 'lowio',
-                 'iofilemgr', 'oled', 'lcd'):
+                 'iofilemgr', 'oled', 'lcd', 'usbmtp'):
         firmware = load_module(kd, name)
         if firmware:
             exports.update(firmware.exports)
@@ -211,10 +222,15 @@ def verify(kd, dll, builds, hardware, version):
     for name, library, function in panels:
         assert (library, function) in exports, (
             hardware, version, name, hex(library), hex(function))
+    mtp = runtime_mtp_imports()
+    for name, library, function in mtp:
+        assert (library, function) in exports, (
+            hardware, version, name, hex(library), hex(function))
     return {'hardware': hardware, 'firmware': version, 'modules': modules,
             'imports_verified': imports_verified,
             'runtime_audio_exports_verified': len(dynamic),
-            'runtime_panel_exports_verified': len(panels), 'device_tested': False}
+            'runtime_panel_exports_verified': len(panels),
+            'runtime_mtp_exports_verified': len(mtp), 'device_tested': False}
 
 
 def run(args, dll):
@@ -256,7 +272,8 @@ def run(args, dll):
                                   'src/audio_relay.c', 'src/audio_route.c', 'src/config.c', 'src/settings.c',
                                   'include/audio_route.h',
                                   'include/audio_relay.h', 'include/config.h', 'include/settings.h',
-                                  'include/firmware.h', 'include/firmware_profiles.h')}
+                                  'include/firmware.h', 'include/firmware_profiles.h',
+                                  'include/usb_state.h')}
     return {'verified': records, 'unavailable': unavailable,
             'additional_tool_builds': additional,
             'source_sha256': source_hashes,

@@ -5,6 +5,7 @@
 #include "config.h"
 #include "settings.h"
 #include <psp2kern/io/fcntl.h>
+#include <psp2kern/kernel/suspend.h>
 #include <taihen.h>
 
 static struct {
@@ -17,7 +18,17 @@ static struct {
 	const char *race_text;
 	char created[128];
 	size_t written;
+	uint64_t time;
+	int power_ticks, power_result;
 } mock;
+
+uint64_t ksceKernelGetSystemTimeWide(void) { return mock.time; }
+int ksceKernelPowerTick(SceKernelPowerTickType type)
+{
+	assert(type == SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
+	mock.power_ticks++;
+	return mock.power_result;
+}
 
 SceUID ksceIoOpen(const char *path, int flags, int mode)
 {
@@ -108,7 +119,7 @@ static void test_config_creation(void)
 	vitastream_settings_load();
 	assert(vitastream_settings_speakers_on());
 	assert(!vitastream_settings_lowmemory_on());
-	assert(!strcmp(mock.created, "screen=on\nspeakers=on\nlowmemory=off\n"));
+	assert(!strcmp(mock.created, "screen=on\nspeakers=on\nlowmemory=off\nnosleep=on\n"));
 	assert(mock.creates == 1 && mock.writes == 1 && mock.create_closes == 1);
 	assert(!mock.reads && !mock.closes);
 	vitastream_settings_load();
@@ -117,7 +128,7 @@ static void test_config_creation(void)
 	memset(&mock, 0, sizeof(mock));
 	mock.write_limit = 3;
 	vitastream_settings_load();
-	assert(!strcmp(mock.created, "screen=on\nspeakers=on\nlowmemory=off\n"));
+	assert(!strcmp(mock.created, "screen=on\nspeakers=on\nlowmemory=off\nnosleep=on\n"));
 	assert(mock.writes > 1 && mock.create_closes == 1);
 
 	memset(&mock, 0, sizeof(mock));
@@ -165,9 +176,38 @@ static void test_config_creation(void)
 	memset(&mock, 0, sizeof(mock));
 }
 
+static void test_nosleep_policy(void)
+{
+	memset(&mock, 0, sizeof(mock));
+	mock.text = "screen=on\nspeakers=on"; /* older files default to nosleep=on */
+	vitastream_settings_load();
+	assert(vitastream_nosleep_update(0) == 0 && !mock.power_ticks);
+	assert(vitastream_nosleep_update(1) == 0 && mock.power_ticks == 1);
+	mock.time = 999999;
+	assert(vitastream_nosleep_update(1) == 0 && mock.power_ticks == 1);
+	mock.time = 1000000;
+	assert(vitastream_nosleep_update(1) == 0 && mock.power_ticks == 2);
+	assert(vitastream_nosleep_update(0) == 0);
+	mock.time += 5000000;
+	assert(vitastream_nosleep_update(0) == 0 && mock.power_ticks == 2);
+	assert(vitastream_nosleep_update(1) == 0 && mock.power_ticks == 3);
+	mock.text = "nosleep=off";
+	vitastream_settings_load(); mock.time += 5000000;
+	assert(vitastream_nosleep_update(1) == 0 && mock.power_ticks == 3);
+	mock.text = "nosleep=on";
+	vitastream_settings_load(); mock.power_result = -81;
+	assert(vitastream_nosleep_update(1) == -81 && mock.power_ticks == 4);
+	assert(vitastream_nosleep_update(1) == -81 && mock.power_ticks == 4);
+	mock.power_result = 0; mock.time += 1000000;
+	assert(vitastream_nosleep_update(1) == 0 && mock.power_ticks == 5);
+	assert(vitastream_nosleep_update(0) == 0);
+	memset(&mock, 0, sizeof(mock));
+}
+
 int main(void)
 {
 	test_config_creation();
+	test_nosleep_policy();
 	vitastream_settings_load();
 	assert(vitastream_settings_speakers_on() && !mock.reads && !mock.closes);
 	assert(vitastream_screen_update(1) == 0 && !mock.off);

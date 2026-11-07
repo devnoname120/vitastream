@@ -1,5 +1,6 @@
 #include <psp2kern/io/fcntl.h>
 #include <psp2kern/kernel/threadmgr.h>
+#include <psp2kern/kernel/suspend.h>
 #include <psp2kern/types.h>
 #include <taihen.h>
 #include <stdint.h>
@@ -17,7 +18,9 @@ struct panel_api {
 	int (*set_brightness)(int value);
 };
 
-static struct vitastream_config config = {1, 1, 0};
+static struct vitastream_config config = {1, 1, 0, 1};
+static uint64_t next_power_tick;
+static int power_tick_result;
 static struct panel_api panel;
 static int panel_resolved;
 static int panel_owned;
@@ -59,7 +62,7 @@ static int resolve_active_panel(void)
 
 static void create_default_config(void)
 {
-	static const char text[] = "screen=on\nspeakers=on\nlowmemory=off\n";
+	static const char text[] = "screen=on\nspeakers=on\nlowmemory=off\nnosleep=on\n";
 	size_t length = sizeof(text) - 1, written = 0;
 	/* An unsuccessful read must never truncate an existing configuration,
 	 * including one created between the read and this exclusive open. */
@@ -104,6 +107,7 @@ void vitastream_settings_load(void)
 	diagnostic_record("config screen on", config.screen_on);
 	diagnostic_record("config local speakers on", config.speakers_on);
 	diagnostic_record("config lowmemory on", config.lowmemory_on);
+	diagnostic_record("config nosleep on", config.nosleep_on);
 }
 
 int vitastream_settings_speakers_on(void)
@@ -114,6 +118,23 @@ int vitastream_settings_speakers_on(void)
 int vitastream_settings_lowmemory_on(void)
 {
 	return config.lowmemory_on;
+}
+
+int vitastream_nosleep_update(int active)
+{
+	if (!active || !config.nosleep_on) {
+		next_power_tick = 0;
+		power_tick_result = 0;
+		return 0;
+	}
+	uint64_t now = ksceKernelGetSystemTimeWide();
+	if (now >= next_power_tick) {
+		next_power_tick = now + 1000000;
+		/* Reset only the automatic-suspend timer. No persistent power lock
+		 * survives capture stop, and the panel policy remains independent. */
+		power_tick_result = ksceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
+	}
+	return power_tick_result;
 }
 
 int vitastream_screen_restore(void)

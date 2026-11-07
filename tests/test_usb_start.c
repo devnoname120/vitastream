@@ -5,7 +5,9 @@
 #define UVC_DRIVER_NAME "vitastream_udcd_driver"
 #define UVC_USB_PID 0x1337
 #define SCE_UDCD_ERROR_INVALID_ARGUMENT (-2)
+#define SCE_UDCD_ERROR_DRIVER_IN_PROGRESS (-3)
 #define LOG(...) ((void)0)
+static int uvc_usb_yielded;
 static unsigned char uvc_probe_control_setting[16];
 static const unsigned char uvc_probe_control_setting_default[16] = {1, 2, 3, 4};
 static struct {

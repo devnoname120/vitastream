@@ -1,5 +1,6 @@
 #include <psp2kern/kernel/modulemgr.h>
 #include <psp2kern/kernel/threadmgr.h>
+#include <psp2kern/kernel/threadmgr/fast_mutex.h>
 #include <psp2kern/kernel/sysmem.h>
 #include <psp2kern/kernel/sysmem/uid_guid.h>
 #include <psp2kern/kernel/cpu.h>
@@ -17,6 +18,7 @@
 #include "uvc.h"
 #include "video.h"
 #include "settings.h"
+#include "usb_state.h"
 
 #ifdef DEBUG
 
@@ -40,6 +42,10 @@
 
 #define UVC_DRIVER_NAME			"vitastream"
 #define UVC_USB_PID			0x1337
+
+#define SCE_USB_MTP_FOR_DRIVER_NID	0xF0122DB1
+#define SCE_USB_MTP_STOP_DRIVER_NID	0x08CD359F
+#define SCE_USB_MTP_START_DRIVER_NID	0x6FC97594
 
 #define SCE_DISPLAY_PIXELFORMAT_BGRA5551 0x50000000
 
@@ -99,6 +105,16 @@ static atomic_uint uvc_capture_interval = 166666;
 static atomic_uint uvc_pacing_epoch;
 static atomic_int uvc_recover_pending;
 static int uvc_driver_registered;
+static atomic_int uvc_audio_wanted, uvc_audio_control_dirty, uvc_audio_attach_pending;
+static atomic_int uvc_usb_yielded, uvc_usb_yield_complete, uvc_usb_resume_pending;
+enum { MTP_HOOK_IDLE = -1, MTP_HOOK_INSTALLING = -2, MTP_HOOK_CLOSING = -3 };
+static atomic_int g_mtp_stop_hook_uid = ATOMIC_VAR_INIT(MTP_HOOK_IDLE);
+static tai_hook_ref_t g_mtp_stop_hook_ref;
+static atomic_int g_mtp_start_hook_uid = ATOMIC_VAR_INIT(MTP_HOOK_IDLE);
+static tai_hook_ref_t g_mtp_start_hook_ref;
+static SceKernelFastMutex g_usb_handoff_mutex;
+static int g_usb_handoff_mutex_initialized;
+enum { UVC_EVENT_USB_YIELDED = 2 };
 
 
 static int usb_ep0_req_send(const void *data, unsigned int size)
@@ -152,6 +168,8 @@ static int usb_ep0_enqueue_recv_for_req(const SceUdcdEP0DeviceRequest *ep0_req)
 
 static void uvc_handle_video_streaming_req_recv(const SceUdcdEP0DeviceRequest *req)
 {
+	if (uvc_usb_yielded)
+		return;
 	struct uvc_streaming_control *streaming_control =
 		(struct uvc_streaming_control *)pending_recv.buffer;
 
@@ -380,10 +398,16 @@ static int uvc_udcd_change_setting(int interfaceNumber, int alternateSetting, in
 	LOG("uvc_udcd_change %d %d\n", interfaceNumber, alternateSetting);
 
 	if (interfaceNumber == AUDIO_STREAM_INTERFACE) {
-		if (alternateSetting == 1)
-			return uac_audio_start();
-
-		uac_audio_request_stop();
+		if (alternateSetting == 1 && uvc_usb_yielded)
+			return SCE_UDCD_ERROR_DRIVER_IN_PROGRESS;
+		/* Native USB callbacks can run where waiting is forbidden. The video
+		 * worker owns all blocking audio route/start/attach operations. */
+		uvc_audio_wanted = alternateSetting == 1;
+		uvc_audio_control_dirty = 1;
+		if (alternateSetting != 1)
+			uac_audio_request_stop();
+		if (uvc_thread_run)
+			ksceKernelSetEventFlag(uvc_event_flag_id, 1);
 	}
 
 	return 0;
@@ -394,7 +418,12 @@ static int uvc_udcd_attach(int usb_version, void *user_data)
 	LOG("uvc_udcd_attach %d\n", usb_version);
 
 	ksceUdcdClearFIFO(&endpoints[1]);
-	uac_audio_on_attach();
+	uvc_audio_wanted = 0;
+	uvc_audio_attach_pending = 1;
+	uvc_audio_control_dirty = 1;
+	uac_audio_request_stop();
+	if (uvc_thread_run)
+		ksceKernelSetEventFlag(uvc_event_flag_id, 1);
 	uvc_recover_pending = 0;
 
 	return 0;
@@ -405,6 +434,8 @@ static void uvc_udcd_detach(void *user_data)
 	LOG("uvc_udcd_detach\n");
 
 	uvc_handle_video_abort();
+	uvc_audio_wanted = 0;
+	uvc_audio_control_dirty = 1;
 	uac_audio_request_stop();
 	if (uvc_thread_run) {
 		uvc_recover_pending = 1;
@@ -422,7 +453,7 @@ static int uvc_driver_start(int size, void *p, void *user_data)
 {
 	LOG("uvc_driver_start\n");
 
-	return 0;
+	return uvc_usb_yielded ? SCE_UDCD_ERROR_DRIVER_IN_PROGRESS : 0;
 }
 
 static int uvc_driver_stop(int size, void *p, void *user_data)
@@ -430,6 +461,8 @@ static int uvc_driver_stop(int size, void *p, void *user_data)
 	LOG("uvc_driver_stop\n");
 
 	uvc_handle_video_abort();
+	uvc_audio_wanted = 0;
+	uvc_audio_control_dirty = 1;
 	uac_audio_request_stop();
 	if (uvc_thread_run) {
 		uvc_recover_pending = 1;
@@ -463,18 +496,240 @@ static SceUdcdDriver uvc_udcd_driver = {
 int uvc_start(void);
 int uvc_stop(void);
 
+static void uvc_apply_audio_control(void)
+{
+	int attached = atomic_exchange(&uvc_audio_attach_pending, 0);
+	if (!atomic_exchange(&uvc_audio_control_dirty, 0) && !attached)
+		return;
+	if (attached)
+		uac_audio_on_attach();
+	if (!uvc_audio_wanted || uvc_usb_yielded) {
+		uac_audio_request_stop();
+		return;
+	}
+	int state = ksceUdcdGetDeviceState();
+	if (ksceUdcdGetDrvState(UVC_DRIVER_NAME) != VITASTREAM_USB_DRIVER_STARTED ||
+	    state < 0 || !(state & VITASTREAM_USB_ACTIVATED) ||
+	    !(state & VITASTREAM_USB_CONNECTED)) {
+		/* Resume may report the alternate setting before the bus is ready. */
+		uvc_audio_control_dirty = 1;
+		return;
+	}
+	int ret = uac_audio_start();
+	diagnostic_record("audio start on USB worker", ret);
+	if (!uvc_audio_wanted || uvc_usb_yielded)
+		uac_audio_request_stop();
+}
+
+static int uvc_complete_usb_handoff(void)
+{
+	if (uvc_usb_yield_complete)
+		return 0;
+	uvc_audio_wanted = 0;
+	uac_audio_request_stop();
+	uvc_video_cancel();
+	int ret = uac_audio_stop_sync();
+	if (ret < 0)
+		return ret;
+	/* The capture thread owns the optional Camera mutex. Only this thread
+	 * may return it, after every outstanding transfer has completed. */
+	ret = uvc_video_release();
+	if (ret < 0)
+		return ret;
+	ret = vitastream_screen_restore();
+	if (ret < 0)
+		return ret;
+	ret = ksceUdcdDeactivate();
+	if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT)
+		return ret;
+	if (ksceUdcdGetDrvState(UVC_DRIVER_NAME) == VITASTREAM_USB_DRIVER_STARTED) {
+		ret = ksceUdcdStop(UVC_DRIVER_NAME, 0, NULL);
+		if (ret < 0)
+			return ret;
+		ret = ksceUdcdStop("USBDeviceControllerDriver", 0, NULL);
+		if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT)
+			return ret;
+	}
+	uvc_usb_yield_complete = 1;
+	ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_USB_YIELDED);
+	diagnostic_record("USB yielded to external owner", 0);
+	return 0;
+}
+
+static int mtp_stop_for_external_owner(void)
+{
+	/* SceMtpIfStopDriver(1), used by VitaShell, calls this kernel export.
+	 * Pause before Sony checks its MTP-only state, which cannot see UVC. */
+	if (!uvc_thread_run)
+		return TAI_CONTINUE(int, g_mtp_stop_hook_ref);
+	ksceKernelLockFastMutex(&g_usb_handoff_mutex);
+	int ret;
+	/* Also honour requests arriving just before uvc_start: the worker's
+	 * yielded gates must prevent a late activation after storage takes over. */
+	uvc_usb_resume_pending = 0;
+	if (!uvc_usb_yielded) {
+		uvc_usb_yield_complete = 0;
+		ksceKernelClearEventFlag(uvc_event_flag_id, ~UVC_EVENT_USB_YIELDED);
+	}
+	uvc_usb_yielded = 1;
+	uvc_audio_wanted = 0;
+	uvc_audio_control_dirty = 1;
+	uvc_handle_video_abort();
+	ksceKernelSetEventFlag(uvc_event_flag_id, 1);
+	if (!uvc_usb_yield_complete) {
+		SceUInt32 timeout = 3000000;
+		ret = ksceKernelWaitEventFlag(uvc_event_flag_id, UVC_EVENT_USB_YIELDED,
+			SCE_EVENT_WAITOR | SCE_EVENT_WAITCLEAR_PAT, NULL, &timeout);
+		if (ret < 0)
+			goto out;
+	}
+	ret = TAI_CONTINUE(int, g_mtp_stop_hook_ref);
+	/* Taking UVC over stopped the underlying MTP driver directly, leaving
+	 * Sony's service-level started flag intact. Restore just its backend if
+	 * necessary so its own Stop can finish normal bookkeeping. No activate
+	 * call is made, and another active storage driver is never displaced. */
+	if (ret == (int)0x80543601 &&
+	    ksceUdcdGetDrvState("USB_MTP_Driver") == VITASTREAM_USB_DRIVER_REGISTERED &&
+	    ksceUdcdGetDrvState("USBStor_Driver") != VITASTREAM_USB_DRIVER_STARTED) {
+		ret = ksceUdcdStart("USBDeviceControllerDriver", 0, NULL);
+		if (ret >= 0 || ret == SCE_UDCD_ERROR_INVALID_ARGUMENT) {
+			ret = ksceUdcdStart("USB_MTP_Driver", 0, NULL);
+			if (ret >= 0)
+				ret = TAI_CONTINUE(int, g_mtp_stop_hook_ref);
+		}
+	}
+out:
+	diagnostic_record("external MTP stop result", ret);
+	ksceKernelUnlockFastMutex(&g_usb_handoff_mutex);
+	return ret;
+}
+
+static int mtp_start_after_external_owner(void)
+{
+	if (!uvc_thread_run)
+		return TAI_CONTINUE(int, g_mtp_start_hook_ref);
+	ksceKernelLockFastMutex(&g_usb_handoff_mutex);
+	int ret = TAI_CONTINUE(int, g_mtp_start_hook_ref);
+	if (uvc_usb_yielded) {
+		/* VitaShell calls this after storage Stop succeeds, including with
+		 * the cable unplugged. Retain intent even if MTP cannot activate:
+		 * the worker can reclaim an idle bus and retry temporary failures. */
+		uvc_usb_resume_pending = 1;
+		ksceKernelSetEventFlag(uvc_event_flag_id, 1);
+		diagnostic_record("MTP restore completed; USB resume pending", ret);
+	}
+	ksceKernelUnlockFastMutex(&g_usb_handoff_mutex);
+	return ret;
+}
+
+static int uvc_install_mtp_handoff(void)
+{
+	int expected = MTP_HOOK_IDLE;
+	if (!atomic_compare_exchange_strong(&g_mtp_stop_hook_uid, &expected, MTP_HOOK_INSTALLING))
+		return expected >= 0 ? 0 : SCE_UDCD_ERROR_DRIVER_IN_PROGRESS;
+	int ret;
+	if (!g_usb_handoff_mutex_initialized) {
+		ret = ksceKernelInitializeFastMutex(&g_usb_handoff_mutex, "uvc_usb_handoff", 0, NULL);
+		if (ret < 0)
+			goto failed;
+		g_usb_handoff_mutex_initialized = 1;
+	}
+	/* Install restoration first. If Stop publication needs a retry, the
+	 * existing Start hook remains valid and the module remains resident. */
+	if (atomic_load(&g_mtp_start_hook_uid) < 0) {
+		ret = taiHookFunctionExportForKernel(KERNEL_PID, &g_mtp_start_hook_ref,
+			"SceUsbMtp", SCE_USB_MTP_FOR_DRIVER_NID,
+			SCE_USB_MTP_START_DRIVER_NID, mtp_start_after_external_owner);
+		if (ret < 0)
+			goto failed;
+		atomic_store(&g_mtp_start_hook_uid, ret);
+	}
+	ret = taiHookFunctionExportForKernel(KERNEL_PID, &g_mtp_stop_hook_ref,
+		"SceUsbMtp", SCE_USB_MTP_FOR_DRIVER_NID,
+		SCE_USB_MTP_STOP_DRIVER_NID, mtp_stop_for_external_owner);
+	if (ret < 0)
+		goto failed;
+	atomic_store(&g_mtp_stop_hook_uid, ret);
+	diagnostic_record("install MTP handoff hook", 0);
+	return 0;
+failed:
+	atomic_store(&g_mtp_stop_hook_uid, MTP_HOOK_IDLE);
+	return ret;
+}
+
+static int uvc_usb_prepare_unload(void)
+{
+	if (atomic_load(&g_mtp_start_hook_uid) >= 0)
+		return SCE_KERNEL_STOP_FAIL;
+	int expected = MTP_HOOK_IDLE;
+	return atomic_compare_exchange_strong(&g_mtp_stop_hook_uid, &expected, MTP_HOOK_CLOSING) ||
+		expected == MTP_HOOK_CLOSING ? 0 : SCE_KERNEL_STOP_FAIL;
+}
+
+static void uvc_usb_ownership_term(void)
+{
+	if (g_usb_handoff_mutex_initialized) {
+		ksceKernelFinalizeFastMutex(&g_usb_handoff_mutex);
+		g_usb_handoff_mutex_initialized = 0;
+	}
+}
+
 static int uvc_mtp_ready(void)
 {
 	int device_state = ksceUdcdGetDeviceState();
-	return ksceUdcdGetDrvState("USB_MTP_Driver") == SCE_UDCD_STATUS_DRIVER_STARTED &&
-	       ksceUdcdGetDrvState("USBStor_Driver") != SCE_UDCD_STATUS_DRIVER_STARTED &&
-	       device_state >= 0 && (device_state & SCE_UDCD_STATUS_ACTIVATED);
+	return ksceUdcdGetDrvState("USB_MTP_Driver") == VITASTREAM_USB_DRIVER_STARTED &&
+	       ksceUdcdGetDrvState("USBStor_Driver") != VITASTREAM_USB_DRIVER_STARTED &&
+	       device_state >= 0 && (device_state & VITASTREAM_USB_ACTIVATED);
+}
+
+static int uvc_resume_usb(void)
+{
+	static uint64_t retry_after;
+	if (!uvc_thread_run || !uvc_usb_yielded || !uvc_usb_yield_complete ||
+	    !uvc_usb_resume_pending || ksceKernelGetSystemTimeWide() < retry_after)
+		return 0;
+	/* A Stop caller may hold this mutex while waiting for this very worker
+	 * to finish handing off. Never block the worker behind that caller. */
+	if (ksceKernelTryLockFastMutex(&g_usb_handoff_mutex) < 0)
+		return 0;
+	int ret = 0;
+	if (!uvc_thread_run || !uvc_usb_yielded || !uvc_usb_yield_complete ||
+	    !uvc_usb_resume_pending)
+		goto out;
+	int storage = ksceUdcdGetDrvState("USBStor_Driver");
+	if (storage != VITASTREAM_USB_DRIVER_REGISTERED &&
+	    storage != VITASTREAM_USB_DRIVER_ABSENT)
+		goto out;
+	int state = ksceUdcdGetDeviceState();
+	if (state < 0 || ((state & VITASTREAM_USB_ACTIVATED) && !uvc_mtp_ready()))
+		goto out;
+	/* No CONNECTED check: arm the device while unplugged so the next plug
+	 * enumerates VitaStream. A completed MTP restore attempt plus an idle
+	 * bus is sufficient even if that restore could not activate MTP. */
+	ksceKernelClearEventFlag(uvc_event_flag_id, ~UVC_EVENT_USB_YIELDED);
+	uvc_usb_yield_complete = 0;
+	uvc_usb_yielded = 0;
+	ret = uvc_start();
+	if (ret < 0) {
+		/* Drain again before another attempt; failed activation may have
+		 * reached driver Start. Neither attach nor detach clears intent. */
+		uvc_usb_yielded = 1;
+		retry_after = ksceKernelGetSystemTimeWide() + 1000000;
+	} else {
+		uvc_usb_resume_pending = 0;
+		uvc_recover_pending = 0;
+		retry_after = 0;
+	}
+	diagnostic_record("resume UVC after external USB owner", ret);
+out:
+	ksceKernelUnlockFastMutex(&g_usb_handoff_mutex);
+	return ret;
 }
 
 static int uvc_recover_usb(void)
 {
 	int ret;
-	if (!uvc_thread_run || !uvc_recover_pending || !uvc_mtp_ready())
+	if (!uvc_thread_run || uvc_usb_yielded || !uvc_recover_pending || !uvc_mtp_ready())
 		return 0;
 	ret = uac_audio_stop_sync();
 	if (ret < 0)
@@ -484,12 +739,16 @@ static int uvc_recover_usb(void)
 	if (ret < 0)
 		return ret;
 	/* VitaShell can start another storage session while workers drain. */
-	if (!uvc_thread_run || !uvc_mtp_ready())
+	if (ksceKernelTryLockFastMutex(&g_usb_handoff_mutex) < 0)
 		return 0;
-	ret = uvc_start();
-	if (ret >= 0)
-		uvc_recover_pending = 0;
-	diagnostic_record("recover UVC after MTP restore", ret);
+	ret = 0;
+	if (uvc_thread_run && !uvc_usb_yielded && uvc_mtp_ready()) {
+		ret = uvc_start();
+		if (ret >= 0)
+			uvc_recover_pending = 0;
+		diagnostic_record("recover UVC after MTP restore", ret);
+	}
+	ksceKernelUnlockFastMutex(&g_usb_handoff_mutex);
 	return ret;
 }
 
@@ -662,7 +921,7 @@ static int send_frame(void)
 	uint64_t time1, time2, time3;
 #endif
 
-	if (format_index != FORMAT_INDEX_UNCOMPRESSED_NV12 ||
+	if (uvc_usb_yielded || format_index != FORMAT_INDEX_UNCOMPRESSED_NV12 ||
 		frame_index < 1 || frame_index > frame_count)
 		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
 
@@ -671,7 +930,7 @@ static int send_frame(void)
 	ret = uvc_video_prepare(VIDEO_FRAME_SIZE_NV12(dst_width, dst_height), &buffer);
 	if (ret < 0)
 		return ret;
-	if (!uvc_thread_run || !stream ||
+	if (!uvc_thread_run || uvc_usb_yielded || !stream ||
 		frame_index != uvc_probe_control_setting.bFrameIndex ||
 		format_index != uvc_probe_control_setting.bFormatIndex)
 		return 0;
@@ -700,7 +959,7 @@ static int send_frame(void)
 	ret = uvc_video_wait();
 	if (ret < 0)
 		return ret;
-	if (!uvc_thread_run || !stream ||
+	if (!uvc_thread_run || uvc_usb_yielded || !stream ||
 		frame_index != uvc_probe_control_setting.bFrameIndex ||
 		format_index != uvc_probe_control_setting.bFormatIndex)
 		return 0;
@@ -711,7 +970,7 @@ static int send_frame(void)
 	fid ^= 1;
 
 	/* A stop can race the enqueue even after the pre-submit check. */
-	if (!uvc_thread_run || !stream ||
+	if (!uvc_thread_run || uvc_usb_yielded || !stream ||
 		frame_index != uvc_probe_control_setting.bFrameIndex ||
 		format_index != uvc_probe_control_setting.bFormatIndex)
 		uvc_video_cancel();
@@ -730,7 +989,7 @@ static int display_vblank_cb_func(int notifyId, int notifyCount, int notifyArg, 
 	static unsigned int last_epoch;
 	unsigned int interval, epoch;
 
-	if (!stream) {
+	if (!stream || uvc_usb_yielded) {
 		phase = 0;
 		return 0;
 	}
@@ -793,12 +1052,38 @@ static int uvc_thread(SceSize args, void *argp)
 	if (!uvc_thread_run)
 		return 0;
 	vitastream_settings_load();
-	start_result = uvc_start();
-	diagnostic_record("uvc_start", start_result);
-	if (start_result < 0)
+	/* Sony's MTP service may finish loading after early kernel plugins. The
+	 * handoff hook must be published before taking its underlying USB bus. */
+	for (unsigned int attempt = 0; ; attempt++) {
+		start_result = uvc_install_mtp_handoff();
+		if (start_result >= 0 || !uvc_thread_run || attempt == 9)
+			break;
+		ksceKernelDelayThread(1000000);
+	}
+	if (start_result < 0 || !uvc_thread_run) {
+		diagnostic_record("MTP handoff hook unavailable", start_result);
 		return start_result;
-	uvc_recover_pending = 0;
-
+	}
+	if (ksceKernelTryLockFastMutex(&g_usb_handoff_mutex) < 0) {
+		/* Let the MTP request finish. The worker's recovery path will
+		 * retry takeover; it must not wait behind a Stop awaiting us. */
+		uvc_recover_pending = 1;
+		start_result = 0;
+	} else {
+		if (ksceUdcdGetDrvState("USBStor_Driver") == VITASTREAM_USB_DRIVER_STARTED) {
+			/* Never interrupt a storage session opened before us. */
+			uvc_usb_yielded = 1;
+			uvc_usb_yield_complete = 1;
+			start_result = 0;
+		} else {
+			start_result = uvc_start();
+		}
+		uvc_recover_pending = 0;
+		ksceKernelUnlockFastMutex(&g_usb_handoff_mutex);
+	}
+	diagnostic_record("uvc_start", start_result);
+	if (start_result < 0 && !uvc_usb_yielded)
+		return start_result;
 	display_vblank_cb_uid = ksceKernelCreateCallback("uvc_display_vblank", 0,
 							 display_vblank_cb_func, NULL);
 
@@ -822,6 +1107,20 @@ static int uvc_thread(SceSize args, void *argp)
 
 		if (!uvc_thread_run)
 			break;
+		if (uvc_usb_yielded) {
+			static int last_handoff_error;
+			int handoff_ret = uvc_complete_usb_handoff();
+			if (handoff_ret < 0 && handoff_ret != last_handoff_error)
+				diagnostic_record("USB handoff worker error", handoff_ret);
+			last_handoff_error = handoff_ret;
+			video_progress = 0;
+			vitastream_nosleep_update(0);
+			if (handoff_ret >= 0)
+				uvc_resume_usb();
+			if (uvc_usb_yielded)
+				continue;
+		}
+		uvc_apply_audio_control();
 		if (!stream) {
 			video_progress = 0;
 			uvc_video_cancel();
@@ -850,8 +1149,13 @@ static int uvc_thread(SceSize args, void *argp)
 		 * the handheld dark indefinitely on a retained request. */
 		{
 			static int last_screen_error;
-			int screen_ret = vitastream_screen_update(
-				(stream && video_progress) || uac_audio_is_active());
+			static int last_nosleep_error;
+			int active = (stream && video_progress) || uac_audio_is_active();
+			int nosleep_ret = vitastream_nosleep_update(active);
+			if (nosleep_ret < 0 && nosleep_ret != last_nosleep_error)
+				diagnostic_record("automatic suspend policy error", nosleep_ret);
+			last_nosleep_error = nosleep_ret;
+			int screen_ret = vitastream_screen_update(active);
 			if (screen_ret < 0 && screen_ret != last_screen_error)
 				diagnostic_record("local display policy error", screen_ret);
 			last_screen_error = screen_ret;
@@ -867,6 +1171,8 @@ static int uvc_thread(SceSize args, void *argp)
 int uvc_start(void)
 {
 	int ret;
+	if (uvc_usb_yielded)
+		return SCE_UDCD_ERROR_DRIVER_IN_PROGRESS;
 
 	memcpy(&uvc_probe_control_setting, &uvc_probe_control_setting_default,
 		sizeof(uvc_probe_control_setting));
@@ -898,6 +1204,10 @@ int uvc_start(void)
 		goto err_start_uvc_driver;
 	}
 
+	if (uvc_usb_yielded) {
+		ret = SCE_UDCD_ERROR_DRIVER_IN_PROGRESS;
+		goto err_activate;
+	}
 	ret = ksceUdcdActivate(UVC_USB_PID);
 	diagnostic_record("activate 0x1337", ret);
 	if (ret < 0) {
@@ -912,6 +1222,8 @@ err_activate:
 err_start_uvc_driver:
 	ksceUdcdStop("USBDeviceControllerDriver", 0, NULL);
 restore_mtp:
+	if (uvc_usb_yielded)
+		return ret;
 	ksceUdcdStart("USBDeviceControllerDriver", 0, NULL);
 	ksceUdcdStart("USB_MTP_Driver", 0, NULL);
 	ksceUdcdActivate(0x4E4);
@@ -1010,7 +1322,9 @@ int module_start(SceSize argc, const void *args)
 		goto err_return;
 	}
 
-	uvc_event_flag_id = ksceKernelCreateEventFlag("uvc_event_flag", 0,
+	/* The capture worker waits for bit 1; an external USB owner waits for
+	 * the handoff acknowledgement on bit 2. Both may wait concurrently. */
+	uvc_event_flag_id = ksceKernelCreateEventFlag("uvc_event_flag", SCE_EVENT_WAITMULTIPLE,
 						      0, NULL);
 	diagnostic_record("create uvc_event_flag", uvc_event_flag_id);
 	if (uvc_event_flag_id < 0) {
@@ -1070,6 +1384,8 @@ err_return:
 
 int module_stop(SceSize argc, const void *args)
 {
+	if (uvc_usb_prepare_unload() < 0)
+		return SCE_KERNEL_STOP_FAIL;
 	if (uvc_video_prepare_unload() < 0)
 		return SCE_KERNEL_STOP_FAIL;
 	if (uac_audio_prepare_unload() < 0)
@@ -1102,6 +1418,7 @@ int module_stop(SceSize argc, const void *args)
 		return SCE_KERNEL_STOP_FAIL;
 	if (uac_audio_term() < 0)
 		return SCE_KERNEL_STOP_FAIL;
+	uvc_usb_ownership_term();
 
 	ksceKernelDeleteEventFlag(uvc_event_flag_id);
 	ksceKernelDeleteThread(uvc_thread_id);

@@ -195,12 +195,13 @@ They do not replace device tests of IFTU, USB timing, or simultaneous audio.
 ### Configuration
 
 The plugin automatically creates `ur0:/tai/vitastream.cfg` on startup when it
-is missing. Screen and speakers default to on; low-memory mode defaults to off:
+is missing. Screen, speakers and `nosleep` default to on; low-memory mode defaults to off:
 
 ```ini
 screen=on
 speakers=on
 lowmemory=off
+nosleep=on
 ```
 
 - `screen=off` turns off the local OLED/LCD panel while the host captures video
@@ -216,12 +217,18 @@ lowmemory=off
   `lowmemory=off` enables the optional second buffer, with automatic fallback
   and recovery when another app uses the camera. `1` and `0` are also accepted
   for this option.
+- `nosleep=on` prevents automatic suspend while USB video and/or audio capture
+  is active. It refreshes only the automatic-suspend idle timer, at most once
+  per second. When capture stops it stops refreshing the timer, allowing normal
+  automatic suspend again. It does not override the panel setting or block
+  manual sleep. `nosleep=off` leaves the suspend policy alone. `1` and `0` are
+  also accepted for this option.
 
 The file is read on plugin startup; reboot after editing it. `#` and `;` start
 comments. Keys and `on`/`off` values are case-insensitive. Existing files are
-preserved. Files without `lowmemory` use its default of off. An unreadable or
-invalid file uses the defaults: screen on, local playback on, low-memory mode
-off. The same defaults apply if the file cannot be created.
+preserved. Files without `lowmemory` use its default of off; files without
+`nosleep` use its default of on. An unreadable or invalid file uses these same
+defaults. The same defaults apply if the file cannot be created.
 
 **Installation**:
 
@@ -266,10 +273,15 @@ an already-active monitor or Bluetooth route instead of replacing its owner.
 Disable that route before retrying USB audio if necessary.
 
 VitaShell USB storage temporarily takes over the USB controller. Once storage
-stops and VitaShell restores MTP, the worker drains outstanding captures and
-restarts vitastream automatically. The host may need to reopen its capture
-device after re-enumeration. No reboot should be needed for this transition;
-this recovery path still needs confirmation on a Vita.
+stops and VitaShell attempts to restore MTP, the worker restarts vitastream
+automatically when the bus is available. The restart request survives cable
+disconnection and temporary failures; the device can be armed while unplugged.
+Stopping storage while unplugged and then reconnecting does not require a
+reboot. Reconnecting while storage is still active does not take the controller
+away from storage. The host may need to reopen its capture device after
+re-enumeration. Repeated storage handoff and automatic restoration were
+confirmed on a PS Vita 1000 running firmware 3.65; other hardware and firmware
+remain unverified.
 
 Note: Remember that if anything goes wrong (like PSVita not booting) you can always press L at boot to skip plugin loading.
 

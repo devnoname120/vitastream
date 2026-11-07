@@ -10,9 +10,10 @@ struct vitastream_config {
 	int screen_on;
 	int speakers_on;
 	int lowmemory_on;
+	int nosleep_on;
 };
 
-/* Default to local playback/screen on, with low-memory mode off. */
+/* Default to local playback/screen/nosleep on, with low-memory mode off. */
 void vitastream_config_defaults(struct vitastream_config *config);
 /* Parse atomically: an invalid file never partially changes the destination. */
 int vitastream_config_parse(const char *text, size_t length,

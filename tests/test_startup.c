@@ -53,7 +53,8 @@ static SceUID ksceKernelCreateThread(const char *name, int (*entry)(void),
 }
 SceUID ksceKernelCreateEventFlag(const char *name, unsigned int flags, unsigned int initial, void *opt)
 {
-	(void)name; (void)flags; (void)initial; (void)opt;
+	(void)name; (void)initial; (void)opt;
+	assert(flags == SCE_EVENT_WAITMULTIPLE);
 	assert(thread);
 	if (result(EVENT) < 0) return -77;
 	event = 1; return 21;

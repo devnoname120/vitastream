@@ -447,7 +447,7 @@ static struct {
 static struct {
 	unsigned char bFrameIndex, bFormatIndex;
 } uvc_probe_control_setting;
-static atomic_int uvc_thread_run, stream;
+static atomic_int uvc_thread_run, stream, uvc_usb_yielded;
 
 typedef struct {
 	SceSize size;

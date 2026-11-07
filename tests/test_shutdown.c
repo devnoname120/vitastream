@@ -21,6 +21,8 @@ static struct {
 } state;
 
 static int result(int stage) { return state.fail_at == stage ? -77 : 0; }
+static int uvc_usb_prepare_unload(void) {return 0;}
+static void uvc_usb_ownership_term(void) {}
 static int uac_audio_prepare_unload(void) {return state.guard_published ? -88 : 0;}
 static int uvc_video_prepare_unload(void) {return 0;}
 static void uac_audio_begin_shutdown(void) {}

@@ -15,11 +15,12 @@ typedef struct {
 
 static struct uvc_streaming_control uvc_probe_control_setting;
 static struct { unsigned char buffer[64]; } pending_recv;
-static atomic_int stream, uvc_usb_yielded;
+static atomic_int stream, uvc_usb_yielded, suspend_active;
 atomic_uint uvc_capture_interval;
 atomic_uint uvc_pacing_epoch;
 static int uvc_event_flag_id = 42;
 static unsigned int signals;
+static int uvc_suspend_active(void) { return atomic_load(&suspend_active); }
 
 static int ksceKernelSetEventFlag(int id, unsigned int bits)
 {
@@ -150,6 +151,15 @@ static void test_stop_and_restart(void)
 	assert(notify(1) == 1);
 }
 
+static void test_suspend_suppresses_capture(void)
+{
+	start(166667);
+	suspend_active = 1;
+	assert(run(120) == 0);
+	suspend_active = 0;
+	assert(notify(1) == 1);
+}
+
 static void test_committed_timing_only(void)
 {
 	start(333333);
@@ -170,7 +180,8 @@ int main(void)
 	test_coalesced_notifications();
 	test_invalid_counts_and_long_delays();
 	test_stop_and_restart();
+	test_suspend_suppresses_capture();
 	test_committed_timing_only();
-	puts("pacing: 6 test groups passed");
+	puts("pacing: 7 test groups passed");
 	return 0;
 }

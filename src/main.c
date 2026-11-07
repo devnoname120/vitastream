@@ -4,6 +4,7 @@
 #include <psp2kern/kernel/sysmem.h>
 #include <psp2kern/kernel/sysmem/uid_guid.h>
 #include <psp2kern/kernel/cpu.h>
+#include <psp2kern/kernel/suspend.h>
 #include <psp2kern/udcd.h>
 #include <psp2kern/display.h>
 #include <psp2kern/lowio/iftu.h>
@@ -49,9 +50,10 @@
 
 #define SCE_DISPLAY_PIXELFORMAT_BGRA5551 0x50000000
 
-/* Exported by the pinned SDK, but its older sysmem header omits this ABI. */
+/* Exported by the pinned SDK, but its older headers omit these ABIs. */
 int ksceKernelProcModeVAtoPA(SceUID pid, SceUInt32 permission,
 	const void *va, void **pa);
+int ksceKernelUnregisterSysEventHandler(SceUID id);
 
 /* Compatibility copy of the corrected SceIftuPlaneState definition. */
 typedef struct SceIftuPlaneState_updated {
@@ -114,8 +116,40 @@ static atomic_int g_mtp_start_hook_uid = ATOMIC_VAR_INIT(MTP_HOOK_IDLE);
 static tai_hook_ref_t g_mtp_start_hook_ref;
 static SceKernelFastMutex g_usb_handoff_mutex;
 static int g_usb_handoff_mutex_initialized;
-enum { UVC_EVENT_USB_YIELDED = 2 };
+enum { UVC_EVENT_WORK = 1, UVC_EVENT_USB_YIELDED = 2, UVC_EVENT_SUSPEND_READY = 4 };
+#define VITASTREAM_WAIT_TIMEOUT ((int)0x80028005)
 
+enum { UVC_SUSPEND_IDLE, UVC_SUSPEND_REQUESTED,
+	UVC_SUSPEND_QUIESCED, UVC_SUSPEND_RESUME };
+/* ScePower emits 0x100 before SceUsbServ's later USB suspend phases.
+ * Resume only after the final 0x400000 dispatch, after native USB recovery. */
+#define UVC_SYS_EVENT_SUSPEND_BEGIN 0x100
+#define UVC_SYS_EVENT_SUSPEND_ABORT 0x101
+#define UVC_SYS_EVENT_RESUME_USB 0x100000
+#define UVC_SYS_EVENT_RESUME_FINAL 0x400000
+static atomic_int uvc_suspend_state, uvc_suspend_owned;
+static atomic_int uvc_suspend_quiesce_done, uvc_suspend_result;
+static atomic_int g_suspend_handler_ready;
+static SceUID g_suspend_handler_id = -1;
+
+static int uvc_suspend_active(void)
+{
+	return atomic_load(&uvc_suspend_state) != UVC_SUSPEND_IDLE;
+}
+
+static int uvc_suspend_blocks_usb_start(void)
+{
+	int state = atomic_load(&uvc_suspend_state);
+	return state == UVC_SUSPEND_REQUESTED || state == UVC_SUSPEND_QUIESCED;
+}
+
+static void uvc_suspend_reset(void)
+{
+	atomic_store(&uvc_suspend_owned, 0);
+	atomic_store(&uvc_suspend_quiesce_done, 0);
+	atomic_store(&uvc_suspend_result, 0);
+	atomic_store(&uvc_suspend_state, UVC_SUSPEND_IDLE);
+}
 
 static int usb_ep0_req_send(const void *data, unsigned int size)
 {
@@ -398,7 +432,8 @@ static int uvc_udcd_change_setting(int interfaceNumber, int alternateSetting, in
 	LOG("uvc_udcd_change %d %d\n", interfaceNumber, alternateSetting);
 
 	if (interfaceNumber == AUDIO_STREAM_INTERFACE) {
-		if (alternateSetting == 1 && uvc_usb_yielded)
+		if (alternateSetting == 1 &&
+		    (uvc_usb_yielded || uvc_suspend_blocks_usb_start()))
 			return SCE_UDCD_ERROR_DRIVER_IN_PROGRESS;
 		/* Native USB callbacks can run where waiting is forbidden. The video
 		 * worker owns all blocking audio route/start/attach operations. */
@@ -437,9 +472,9 @@ static void uvc_udcd_detach(void *user_data)
 	uvc_audio_wanted = 0;
 	uvc_audio_control_dirty = 1;
 	uac_audio_request_stop();
-	if (uvc_thread_run) {
+	if (uvc_thread_run && !uvc_suspend_active()) {
 		uvc_recover_pending = 1;
-		ksceKernelSetEventFlag(uvc_event_flag_id, 1);
+		ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_WORK);
 	}
 
 }
@@ -453,7 +488,8 @@ static int uvc_driver_start(int size, void *p, void *user_data)
 {
 	LOG("uvc_driver_start\n");
 
-	return uvc_usb_yielded ? SCE_UDCD_ERROR_DRIVER_IN_PROGRESS : 0;
+	return uvc_usb_yielded || uvc_suspend_blocks_usb_start() ?
+		SCE_UDCD_ERROR_DRIVER_IN_PROGRESS : 0;
 }
 
 static int uvc_driver_stop(int size, void *p, void *user_data)
@@ -464,9 +500,9 @@ static int uvc_driver_stop(int size, void *p, void *user_data)
 	uvc_audio_wanted = 0;
 	uvc_audio_control_dirty = 1;
 	uac_audio_request_stop();
-	if (uvc_thread_run) {
+	if (uvc_thread_run && !uvc_suspend_active()) {
 		uvc_recover_pending = 1;
-		ksceKernelSetEventFlag(uvc_event_flag_id, 1);
+		ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_WORK);
 	}
 	return 0;
 }
@@ -503,7 +539,7 @@ static void uvc_apply_audio_control(void)
 		return;
 	if (attached)
 		uac_audio_on_attach();
-	if (!uvc_audio_wanted || uvc_usb_yielded) {
+	if (!uvc_audio_wanted || uvc_usb_yielded || uvc_suspend_active()) {
 		uac_audio_request_stop();
 		return;
 	}
@@ -517,7 +553,7 @@ static void uvc_apply_audio_control(void)
 	}
 	int ret = uac_audio_start();
 	diagnostic_record("audio start on USB worker", ret);
-	if (!uvc_audio_wanted || uvc_usb_yielded)
+	if (!uvc_audio_wanted || uvc_usb_yielded || uvc_suspend_active())
 		uac_audio_request_stop();
 }
 
@@ -554,6 +590,146 @@ static int uvc_complete_usb_handoff(void)
 	ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_USB_YIELDED);
 	diagnostic_record("USB yielded to external owner", 0);
 	return 0;
+}
+
+static int uvc_suspend_quiesce_device(void)
+{
+	int error = 0;
+	int video_ret;
+
+	uvc_audio_wanted = 0;
+	uvc_audio_control_dirty = 1;
+	uac_audio_request_stop();
+	uvc_handle_video_abort();
+	uvc_video_cancel();
+
+	int ret = uac_audio_stop_sync();
+	if (ret < 0)
+		diagnostic_record("suspend audio drain error", ret);
+	ret = vitastream_screen_restore();
+	if (ret < 0)
+		diagnostic_record("suspend screen restore error", ret);
+
+	ret = ksceUdcdDeactivate();
+	if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT)
+		error = ret;
+	if (ksceUdcdGetDrvState(UVC_DRIVER_NAME) == VITASTREAM_USB_DRIVER_STARTED) {
+		ret = ksceUdcdStop(UVC_DRIVER_NAME, 0, NULL);
+		if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT && !error)
+			error = ret;
+	}
+	ret = ksceUdcdStop("USBDeviceControllerDriver", 0, NULL);
+	if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT && !error)
+		error = ret;
+
+	/* Never return a DMA buffer before the wake-capable controller is down. */
+	video_ret = uvc_video_release();
+	if (video_ret < 0)
+		video_ret = uvc_video_release();
+	if (video_ret < 0 && !error)
+		error = video_ret;
+	uvc_recover_pending = 0;
+	return error;
+}
+
+static int uvc_suspend_worker(void)
+{
+	int state = atomic_load(&uvc_suspend_state);
+	if (state == UVC_SUSPEND_IDLE)
+		return 0;
+
+	if (atomic_load(&uvc_suspend_owned) &&
+	    !atomic_load(&uvc_suspend_quiesce_done) &&
+	    (state == UVC_SUSPEND_REQUESTED || state == UVC_SUSPEND_RESUME)) {
+		int ret = uvc_suspend_quiesce_device();
+		diagnostic_record("quiesce UVC for system suspend", ret);
+		atomic_store(&uvc_suspend_result, ret);
+		atomic_store(&uvc_suspend_quiesce_done, 1);
+		int expected = UVC_SUSPEND_REQUESTED;
+		atomic_compare_exchange_strong(&uvc_suspend_state, &expected,
+			UVC_SUSPEND_QUIESCED);
+		ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_SUSPEND_READY);
+		state = atomic_load(&uvc_suspend_state);
+	}
+
+	if (state != UVC_SUSPEND_RESUME)
+		return 1;
+	if (!atomic_load(&uvc_suspend_owned)) {
+		uvc_suspend_reset();
+		return 0;
+	}
+	if (uvc_usb_yielded) {
+		uvc_suspend_reset();
+		return 0;
+	}
+	if (ksceUdcdGetDrvState("USBStor_Driver") == VITASTREAM_USB_DRIVER_STARTED)
+		return 1;
+
+	int ret = uvc_start();
+	diagnostic_record("resume UVC after system suspend", ret);
+	if (ret < 0)
+		return 1;
+	uvc_recover_pending = 0;
+	uvc_suspend_reset();
+	return 0;
+}
+
+static void uvc_suspend_request_resume(void)
+{
+	int state = atomic_load(&uvc_suspend_state);
+	if (state == UVC_SUSPEND_IDLE)
+		return;
+	if (!atomic_load(&uvc_suspend_owned)) {
+		uvc_suspend_reset();
+		return;
+	}
+	atomic_store(&uvc_suspend_state, UVC_SUSPEND_RESUME);
+	if (uvc_thread_run)
+		ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_WORK);
+}
+
+static int uvc_suspend_system_event(int resume, int event, void *args, void *opt)
+{
+	(void)args;
+	(void)opt;
+	if (!uvc_thread_run)
+		return 0;
+	if (event == UVC_SYS_EVENT_SUSPEND_ABORT ||
+	    (resume && event == UVC_SYS_EVENT_RESUME_FINAL)) {
+		uvc_suspend_request_resume();
+		return 0;
+	}
+	if (resume || event != UVC_SYS_EVENT_SUSPEND_BEGIN)
+		return 0;
+
+	int expected = UVC_SUSPEND_IDLE;
+	if (!atomic_compare_exchange_strong(&uvc_suspend_state, &expected,
+		UVC_SUSPEND_REQUESTED))
+		return expected == UVC_SUSPEND_QUIESCED ? 0 : VITASTREAM_WAIT_TIMEOUT;
+	atomic_store(&uvc_suspend_quiesce_done, 0);
+	atomic_store(&uvc_suspend_result, 0);
+	int owned = !uvc_usb_yielded &&
+		ksceUdcdGetDrvState(UVC_DRIVER_NAME) == VITASTREAM_USB_DRIVER_STARTED;
+	atomic_store(&uvc_suspend_owned, owned);
+	if (!owned) {
+		atomic_store(&uvc_suspend_quiesce_done, 1);
+		atomic_store(&uvc_suspend_state, UVC_SUSPEND_QUIESCED);
+		return 0;
+	}
+
+	ksceKernelClearEventFlag(uvc_event_flag_id, ~UVC_EVENT_SUSPEND_READY);
+	ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_WORK);
+	SceUInt32 timeout = 4000000;
+	int ret = ksceKernelWaitEventFlag(uvc_event_flag_id,
+		UVC_EVENT_SUSPEND_READY,
+		SCE_EVENT_WAITOR | SCE_EVENT_WAITCLEAR_PAT, NULL, &timeout);
+	if (ret >= 0)
+		ret = atomic_load(&uvc_suspend_result);
+	if (ret < 0) {
+		atomic_store(&uvc_suspend_state, UVC_SUSPEND_RESUME);
+		ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_WORK);
+	}
+	return ret;
 }
 
 static int mtp_stop_for_external_owner(void)
@@ -685,7 +861,7 @@ static int uvc_mtp_ready(void)
 static int uvc_resume_usb(void)
 {
 	static uint64_t retry_after;
-	if (!uvc_thread_run || !uvc_usb_yielded || !uvc_usb_yield_complete ||
+	if (uvc_suspend_active() || !uvc_thread_run || !uvc_usb_yielded || !uvc_usb_yield_complete ||
 	    !uvc_usb_resume_pending || ksceKernelGetSystemTimeWide() < retry_after)
 		return 0;
 	/* A Stop caller may hold this mutex while waiting for this very worker
@@ -693,7 +869,7 @@ static int uvc_resume_usb(void)
 	if (ksceKernelTryLockFastMutex(&g_usb_handoff_mutex) < 0)
 		return 0;
 	int ret = 0;
-	if (!uvc_thread_run || !uvc_usb_yielded || !uvc_usb_yield_complete ||
+	if (uvc_suspend_active() || !uvc_thread_run || !uvc_usb_yielded || !uvc_usb_yield_complete ||
 	    !uvc_usb_resume_pending)
 		goto out;
 	int storage = ksceUdcdGetDrvState("USBStor_Driver");
@@ -729,7 +905,8 @@ out:
 static int uvc_recover_usb(void)
 {
 	int ret;
-	if (!uvc_thread_run || uvc_usb_yielded || !uvc_recover_pending || !uvc_mtp_ready())
+	if (uvc_suspend_active() || !uvc_thread_run || uvc_usb_yielded ||
+	    !uvc_recover_pending || !uvc_mtp_ready())
 		return 0;
 	ret = uac_audio_stop_sync();
 	if (ret < 0)
@@ -989,7 +1166,7 @@ static int display_vblank_cb_func(int notifyId, int notifyCount, int notifyArg, 
 	static unsigned int last_epoch;
 	unsigned int interval, epoch;
 
-	if (!stream || uvc_usb_yielded) {
+	if (!stream || uvc_usb_yielded || uvc_suspend_active()) {
 		phase = 0;
 		return 0;
 	}
@@ -1107,6 +1284,11 @@ static int uvc_thread(SceSize args, void *argp)
 
 		if (!uvc_thread_run)
 			break;
+		if (uvc_suspend_worker()) {
+			video_progress = 0;
+			vitastream_nosleep_update(0);
+			continue;
+		}
 		if (uvc_usb_yielded) {
 			static int last_handoff_error;
 			int handoff_ret = uvc_complete_usb_handoff();
@@ -1285,6 +1467,36 @@ static int uvc_serialize_config_hook(const SceUdcdConfigDescriptor *config_descr
 	return ret;
 }
 
+static int uvc_system_event_bridge(int resume, int event, void *args, void *opt)
+{
+	if (!atomic_load(&g_suspend_handler_ready))
+		return 0;
+	return uvc_suspend_system_event(resume, event, args, opt);
+}
+
+static int uvc_suspend_init(void)
+{
+	uvc_suspend_reset();
+	atomic_store(&g_suspend_handler_ready, 0);
+	g_suspend_handler_id = ksceKernelRegisterSysEventHandler(
+		"vitastream", uvc_system_event_bridge, NULL);
+	return g_suspend_handler_id < 0 ? g_suspend_handler_id : 0;
+}
+
+static int uvc_suspend_term(void)
+{
+	atomic_store(&g_suspend_handler_ready, 0);
+	if (g_suspend_handler_id < 0)
+		return 0;
+	int ret = ksceKernelUnregisterSysEventHandler(g_suspend_handler_id);
+	if (ret < 0) {
+		atomic_store(&g_suspend_handler_ready, 1);
+		return ret;
+	}
+	g_suspend_handler_id = -1;
+	return 0;
+}
+
 void _start() __attribute__((weak, alias("module_start")));
 
 int module_start(SceSize argc, const void *args)
@@ -1353,18 +1565,27 @@ int module_start(SceSize argc, const void *args)
 	}
 	uvc_driver_registered = 1;
 
+	ret = uvc_suspend_init();
+	diagnostic_record("register suspend handler", ret);
+	if (ret < 0)
+		goto err_unregister;
+
 	uvc_thread_run = 1;
 
 	ret = ksceKernelStartThread(uvc_thread_id, 0, NULL);
 	diagnostic_record("start uvc_thread", ret);
 	if (ret < 0) {
 		LOG("Error starting the UVC thread (0x%08X)\n", ret);
-		goto err_unregister;
+		uvc_thread_run = 0;
+		goto err_suspend_term;
 	}
+	atomic_store(&g_suspend_handler_ready, 1);
 
 	diagnostic_record("module_start success", 0);
 	return SCE_KERNEL_START_SUCCESS;
 
+err_suspend_term:
+	uvc_suspend_term();
 err_unregister:
 	if (ksceUdcdUnregister(&uvc_udcd_driver) >= 0)
 		uvc_driver_registered = 0;
@@ -1392,6 +1613,8 @@ int module_stop(SceSize argc, const void *args)
 		return SCE_KERNEL_STOP_FAIL;
 	uac_audio_begin_shutdown();
 	if (uac_audio_stop_sync() < 0)
+		return SCE_KERNEL_STOP_FAIL;
+	if (uvc_suspend_term() < 0)
 		return SCE_KERNEL_STOP_FAIL;
 
 	uvc_thread_run = 0;

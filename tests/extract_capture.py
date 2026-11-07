@@ -14,9 +14,24 @@ mode.add_argument("--conversion", action="store_true")
 mode.add_argument("--usb-recovery", action="store_true")
 mode.add_argument("--audio-backend", action="store_true")
 mode.add_argument("--usb-start", action="store_true")
+mode.add_argument("--suspend", action="store_true")
 args = parser.parse_args()
 text = args.source.read_text()
 prefix = ""
+if args.suspend:
+    regions = (
+        ("enum { UVC_EVENT_WORK", "static int usb_ep0_req_send("),
+        ("static int uvc_suspend_quiesce_device(void)", "static int mtp_stop_for_external_owner(void)"),
+        ("static int uvc_system_event_bridge(", "void _start()"),
+    )
+    parts = []
+    for begin, end in regions:
+        if text.count(begin) != 1 or text.count(end) != 1:
+            raise SystemExit("Suspend boundaries changed; update the test extraction.")
+        start = text.index(begin)
+        parts.append(text[start:text.index(end, start)])
+    args.output.write_text("\n".join(parts))
+    raise SystemExit(0)
 if args.audio_backend:
     # Compile the production backend with simulated firmware exports, worker
     # acknowledgements and DMA completion. Keep constants and types in sync.

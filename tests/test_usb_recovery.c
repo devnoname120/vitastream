@@ -6,7 +6,8 @@
 
 #include "../include/usb_state.h"
 static atomic_int uvc_thread_run, uvc_recover_pending, uvc_usb_yielded;
-static atomic_int uvc_usb_yield_complete, uvc_usb_resume_pending;
+static atomic_int uvc_usb_yield_complete, uvc_usb_resume_pending, suspend_active;
+static int uvc_suspend_active(void) { return atomic_load(&suspend_active); }
 static int g_usb_handoff_mutex, uvc_event_flag_id = 42;
 enum { UVC_EVENT_USB_YIELDED = 2 };
 static uint64_t mock_now;
@@ -74,7 +75,7 @@ static void reset(void)
 	memset(&mock, 0, sizeof(mock));
 	mock.mtp = VITASTREAM_USB_DRIVER_STARTED; mock.state = 0x2020;
 	uvc_thread_run = uvc_recover_pending = 1;
-	uvc_usb_yielded = uvc_usb_yield_complete = uvc_usb_resume_pending = 0;
+	uvc_usb_yielded = uvc_usb_yield_complete = uvc_usb_resume_pending = suspend_active = 0;
 	g_usb_handoff_mutex = 0;
 	mock_now += 10000000;
 }

@@ -12,7 +12,7 @@ $(BUILD_DIR)/video-camera: test_video_camera.c test_video.c ../src/video.c ../in
 $(BUILD_DIR)/video-camera-backend: test_video_camera_backend.c ../src/video_camera.c ../include/video_camera.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SANITIZERS) -pthread -Istubs -I../include -DUVC_VIDEO_CAMERA_BORROW test_video_camera_backend.c -o $@
 
-test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/video-kernel-pool $(BUILD_DIR)/video-camera $(BUILD_DIR)/video-camera-backend $(BUILD_DIR)/shutdown $(BUILD_DIR)/pacing $(BUILD_DIR)/firmware $(BUILD_DIR)/startup $(BUILD_DIR)/conversion $(BUILD_DIR)/usb-recovery $(BUILD_DIR)/usb-start $(BUILD_DIR)/audio-backend $(BUILD_DIR)/config $(BUILD_DIR)/settings-oled $(BUILD_DIR)/settings-lcd $(BUILD_DIR)/audio-relay $(BUILD_DIR)/audio-route
+test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/video-kernel-pool $(BUILD_DIR)/video-camera $(BUILD_DIR)/video-camera-backend $(BUILD_DIR)/shutdown $(BUILD_DIR)/pacing $(BUILD_DIR)/firmware $(BUILD_DIR)/startup $(BUILD_DIR)/conversion $(BUILD_DIR)/usb-recovery $(BUILD_DIR)/usb-start $(BUILD_DIR)/suspend $(BUILD_DIR)/audio-backend $(BUILD_DIR)/config $(BUILD_DIR)/settings-oled $(BUILD_DIR)/settings-lcd $(BUILD_DIR)/audio-relay $(BUILD_DIR)/audio-route
 	$(BUILD_DIR)/video-double
 	$(BUILD_DIR)/video-single
 	$(BUILD_DIR)/video-kernel-pool
@@ -25,6 +25,7 @@ test: $(BUILD_DIR)/video-double $(BUILD_DIR)/video-single $(BUILD_DIR)/video-ker
 	$(BUILD_DIR)/conversion
 	$(BUILD_DIR)/usb-recovery
 	$(BUILD_DIR)/usb-start
+	$(BUILD_DIR)/suspend
 	$(BUILD_DIR)/audio-backend
 	$(BUILD_DIR)/config
 	$(BUILD_DIR)/settings-oled
@@ -52,6 +53,12 @@ $(BUILD_DIR)/usb-start.inc: ../src/main.c extract_capture.py | $(BUILD_DIR)
 
 $(BUILD_DIR)/usb-start: test_usb_start.c $(BUILD_DIR)/usb-start.inc | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SANITIZERS) -I$(BUILD_DIR) test_usb_start.c -o $@
+
+$(BUILD_DIR)/suspend.inc: ../src/main.c extract_capture.py | $(BUILD_DIR)
+	python3 extract_capture.py --suspend ../src/main.c $@
+
+$(BUILD_DIR)/suspend: test_suspend.c $(BUILD_DIR)/suspend.inc | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SANITIZERS) -I../include -I$(BUILD_DIR) test_suspend.c -o $@
 
 $(BUILD_DIR)/audio-backend.inc: ../src/audio.c extract_capture.py | $(BUILD_DIR)
 	python3 extract_capture.py --audio-backend ../src/audio.c $@

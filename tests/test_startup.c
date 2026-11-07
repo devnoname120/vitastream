@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdatomic.h>
 #include <string.h>
 #include "vita_test_kernel.h"
 #include "firmware_profiles.h"
@@ -10,11 +11,12 @@
 #define SCE_KERNEL_START_FAILED 2
 #define LOG(...) (void)0
 #define UVC_DRIVER_NAME "vitastream"
-enum {PROFILE, HOOK, THREAD, EVENT, VIDEO, AUDIO, REGISTER, START};
-static int fail_at, validated, hook, thread, event, video, audio, registered;
+enum {PROFILE, HOOK, THREAD, EVENT, VIDEO, AUDIO, REGISTER, SUSPEND, START};
+static int fail_at, validated, hook, thread, event, video, audio, registered, suspend;
 static int hook_calls, resources, hook_releases;
 static SceUID g_udcd_config_hook_uid, uvc_thread_id, uvc_event_flag_id;
 static int g_udcd_config_hook_ref, uvc_udcd_driver, uvc_driver_registered, uvc_thread_run;
+static atomic_int g_suspend_handler_ready;
 static SceUdcdEndpoint endpoints[3];
 static int result(int stage) { return fail_at == stage ? -77 : 0; }
 static void diagnostic_reset(void) {}
@@ -77,6 +79,15 @@ static int ksceUdcdRegister(void *driver)
 	if (result(REGISTER) < 0) return -77;
 	registered = 1; return 0;
 }
+static int uvc_suspend_init(void)
+{
+	if (result(SUSPEND) < 0) return -77;
+	suspend = 1; return 0;
+}
+static int uvc_suspend_term(void)
+{
+	assert(suspend); suspend = 0; return 0;
+}
 static int ksceKernelStartThread(SceUID id, int argc, const void *args)
 {
 	(void)argc; (void)args;
@@ -105,17 +116,18 @@ static void uvc_video_set_wake_event(SceUID event) { (void)event; }
 int main(void)
 {
 	for (fail_at = PROFILE; fail_at <= START; fail_at++) {
-		validated = hook = thread = event = video = audio = registered = 0;
+		validated = hook = thread = event = video = audio = registered = suspend = 0;
 		hook_calls = resources = hook_releases = uvc_driver_registered = uvc_thread_run = 0;
 		g_udcd_config_hook_uid = -1;
 		assert(module_start(0, NULL) == (fail_at == PROFILE ? 1 : 2));
-		assert(!hook && !thread && !event && !video && !audio && !registered);
+		assert(!hook && !thread && !event && !video && !audio && !registered && !suspend);
 		if (fail_at == PROFILE) assert(!hook_calls && !resources);
 		if (fail_at == HOOK) assert(hook_calls == 1 && !resources && !hook_releases);
 		if (fail_at > HOOK) assert(hook_releases == 1 && g_udcd_config_hook_uid == -1);
 	}
 	fail_at = -1;
 	assert(module_start(0, NULL) == 0 && hook && registered);
-	puts("startup: unsupported profile, hook and six resource failures clean up; supported startup succeeds");
+	assert(suspend);
+	puts("startup: unsupported profile, hook and seven resource failures clean up; supported startup succeeds");
 	return 0;
 }

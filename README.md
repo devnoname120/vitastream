@@ -1,3 +1,18 @@
+# Current test candidates — 2026-11-09
+
+These are test builds, not releases. Install only one SKPRX and keep your existing configuration.
+
+| Package | Source | Purpose |
+| --- | --- | --- |
+| [Current main](vitastream-main-test-2026-11-09.zip) | `70c77f5` | Corrected VitaShell-only handoff and audio startup settling; baseline for issues #8, #9 and #11. No experimental suspend handler. |
+| [Issue #10 Adrenaline tearing](vitastream-issue-10-test-2026-11-09.zip) | `51d66bf` | Current main plus the separate compatibility-framebuffer capture change. Hardware confirmation pending. |
+
+Both packages include normal/diagnostic binaries, complete corresponding source, instructions, licence, checksums and build/firmware receipts. See [SHA256SUMS-2026-11-09](SHA256SUMS-2026-11-09).
+
+The historical issue #4 package is retained below.
+
+---
+
 # vitastream test builds
 
 This branch stores test artifacts only. Development remains on `main`.

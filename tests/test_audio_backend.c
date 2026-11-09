@@ -36,6 +36,7 @@ static struct {
 	int fail_read, fail_drain, fail_disable, stop_after_read;
 	int speakers_on, fail_relay_start, fail_relay_write, fail_relay_stop;
 	int relay_starts, relay_writes, relay_stops, relay_pending;
+	int native_i2s_transfers;
 	int route_reset_read, route_reset_period, route_reset_mode, route_reset_other_mode;
 	int stop_during_route_reset;
 	int guard_installs, guard_owned;
@@ -84,6 +85,9 @@ static int audio_relay_start(void)
 static int audio_relay_write(const void *pcm, size_t bytes)
 {
 	assert(pcm == mock.completed && bytes == sizeof(memory.capture[0]) && mock.pushed);
+	/* The native MAIN queue has two old I2S transfers when the requested
+	 * route changes. Its setter does not synchronously fence them. */
+	assert(!mock.native_i2s_transfers);
 	mock.relay_writes++; mock.relay_pending = mock.fail_relay_write;
 	return mock.fail_relay_write ? -82 : 0;
 }
@@ -147,6 +151,7 @@ static int mock_set_mode(int path, int mode)
 	assert(mode == AUDIO_MONITOR_MODE_READBACK && mock.stopped && mock.lookup_calls == 4);
 	mock.mode_calls++;
 	if (mock.fail_mode) return -74;
+	mock.native_i2s_transfers = 2;
 	firmware_data[AUDIO_SRCMIX1_MODE_OFFSET] = AUDIO_MONITOR_MODE_READBACK;
 	return 0;
 }
@@ -182,6 +187,7 @@ static int mock_monitor_read(int path, void *pcm, int frames)
 	/* A successful next read fences the previous destination before queueing. */
 	mock.completed = mock.pending;
 	if (mock.completed) {
+		if (mock.native_i2s_transfers) mock.native_i2s_transfers--;
 		AudioPcmFrame *samples = mock.completed;
 		samples[0][0] = 123; samples[0][1] = -123;
 	}
@@ -298,9 +304,18 @@ int main(void)
 	assert(uac_audio_start() == -75 && !mock.relay_starts && !g_audio_relay_enabled);
 	reset(); mock.speakers_on = 1;
 	assert(uac_audio_start() == 0 && !mock.relay_starts && g_audio_relay_enabled);
+	/* Capture may stop at any point in the asynchronous startup handoff.
+	 * Never write I2S while Sony still has old local transfers queued. */
+	for (int stop_read = 2; stop_read <= 5; stop_read++) {
+		reset(); mock.speakers_on = 1; mock.stop_after_read = stop_read;
+		assert(uac_audio_start() == 0 && mock.native_i2s_transfers == 2);
+		assert(audio_capture_run(8) == 0);
+		assert(mock.relay_writes == (stop_read == 5));
+		assert(mock.relay_stops == 1 && !g_audio_relay_enabled);
+	}
 
 	for (int failure = 0; failure < 5; failure++) {
-		reset(); mock_capture_claims(); g_audio_desired = 1; mock.stop_after_read = 3;
+		reset(); mock_capture_claims(); g_audio_desired = 1; mock.stop_after_read = 5;
 		g_audio_monitor_set_path_mode = mock_set_mode; g_audio_monitor_read = mock_monitor_read;
 		mock.fail_read = failure == 1 ? 1 : failure == 2 ? 2 : 0;
 		mock.fail_drain = failure == 3; mock.fail_disable = failure == 4;
@@ -312,7 +327,7 @@ int main(void)
 		assert(g_capture_unsafe == (failure == 3));
 		assert(!mock.pending || failure == 3);
 	}
-	reset(); mock_capture_claims(); g_audio_desired = g_audio_relay_enabled = 1; mock.stop_after_read = 3;
+	reset(); mock_capture_claims(); g_audio_desired = g_audio_relay_enabled = 1; mock.stop_after_read = 5;
 	g_audio_monitor_set_path_mode = mock_set_mode; g_audio_monitor_read = mock_monitor_read;
 	assert(audio_capture_run(7) == 0 && mock.relay_writes == 1 && mock.relay_stops == 1 && !g_audio_relay_enabled);
 	reset(); mock_capture_claims(); g_audio_desired = g_audio_relay_enabled = 1; mock.fail_relay_write = 1;
@@ -324,10 +339,10 @@ int main(void)
 	assert(!mock.disable_calls && !mock.drain_calls); /* never race the normal I2S writer */
 	/* A native routing reset must recover without a USB stop/start or a new
 	 * generation, including a reset during the initial queue. */
-	for (int first_read = 1; first_read <= 3; first_read += 2) {
+	for (int first_read = 1; first_read <= 5; first_read += 4) {
 		for (int speakers = 0; speakers <= 1; speakers++) {
 			reset(); mock.speakers_on = speakers; mock.route_reset_read = first_read;
-			mock.stop_after_read = first_read == 1 ? 7 : 8;
+			mock.stop_after_read = first_read == 1 ? 7 : 10;
 			assert(uac_audio_start() == 0);
 			assert(audio_capture_run(8) == 0);
 			assert(mock.mode_calls == 2 && mock.reset_calls == 2 && mock.drain_calls == 1);

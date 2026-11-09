@@ -1,20 +1,21 @@
-# Issue #8 test build: automatic USB resume
+# Issue #8: VitaShell-only USB handoff candidate
 
-This branch hosts the test package for [issue #8](https://github.com/devnoname120/vitastream/issues/8).
-It is a distribution branch. The complete matching source is included inside the ZIP.
+[Download the 2026-11-09 test ZIP](vitastream-issue-8-vitashell-only-test-2026-11-09.zip)
 
-[Download vitastream-issue-8-autoresume-test-2026-11-07.zip](vitastream-issue-8-autoresume-test-2026-11-07.zip)
+This revision fixes an overly broad trigger in the previous handoff implementation.
+The hooks now target SceMtpIfDriver's argument-taking Start/Stop wrappers and accept
+only kind=1 requests from the VITASHELL process. Generic low-level SceUsbMtp shutdown
+is no longer hooked. Missing optional handoff hooks no longer block capture startup.
 
-This candidate replaces the earlier package that required rebooting after storage.
-It adds automatic USB video/audio device restoration after VitaShell ends storage,
-including unplug -> end storage -> replug. Reconnection while storage is active
-leaves the controller with storage. Host capture software may need to reopen its device.
+The ZIP contains optimized normal and diagnostic plugins, corresponding GPL-3.0
+source, the patch against 935acb1, build provenance, checksums and test instructions.
+No automated or hardware tests were run for this revision. Static export metadata
+contains the new hook functions and title-ID query in 31 available firmware images.
 
-The ZIP includes normal and diagnostic plugins, installation/check instructions,
-complete corresponding source, SDK/build provenance and SHA-256 checksums.
-Both plugins compiled successfully. No automated tests or hardware tests were run.
+[Issue #8](https://github.com/devnoname120/vitastream/issues/8)
 
-ZIP SHA-256: `9d35641fc1085bc8ff151b2d14e6a3d83d1d984f05a18813500c5463ef46cca5`
+ZIP SHA-256: `de5e4334e66af79b20d999c20ad2c978d412cd1ef0e30e18edf9d6d3391051e3`
 
-This is an untested candidate, not a release. See README-test.txt inside the ZIP.
+This is a distribution branch, not a release. Main is unchanged by this upload.
+Older packages remain for comparison; their feedback does not validate this revision.
 VitaStream is based on vita-udcd-uvc by Xerpi (GPL-3.0).

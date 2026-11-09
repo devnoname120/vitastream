@@ -1,6 +1,7 @@
 TARGET	= vitastream
 OBJS	= src/main.o src/audio.o src/video.o src/firmware.o src/config.o src/settings.o src/audio_relay.o src/audio_route.o
 LIBS	= -lSceSysmemForDriver_stub -lSceThreadmgrForDriver_stub \
+	-lSceSysrootForKernel_stub \
 	-lSceKernelSuspendForDriver_stub \
 	-lSceCpuForDriver_stub -lSceUdcdForDriver_stub \
 	-lSceDmacmgrForDriver_stub \

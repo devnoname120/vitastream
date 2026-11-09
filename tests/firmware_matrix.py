@@ -147,11 +147,11 @@ def runtime_mtp_imports():
     definitions = {}
     for line in (REPO / 'src/main.c').read_text().splitlines():
         fields = line.split()
-        if len(fields) == 3 and fields[0] == '#define' and fields[1].startswith('SCE_USB_MTP_') and fields[1].endswith('_NID'):
+        if len(fields) == 3 and fields[0] == '#define' and fields[1].startswith('SCE_MTP_IF_') and fields[1].endswith('_NID'):
             definitions[fields[1]] = int(fields[2], 0)
-    library = definitions.pop('SCE_USB_MTP_FOR_DRIVER_NID')
+    library = definitions.pop('SCE_MTP_IF_FOR_DRIVER_NID')
     assert len(definitions) == 2, 'Update the runtime MTP export coverage'
-    return [('SceUsbMtp', library, nid) for nid in definitions.values()]
+    return [('SceMtpIfDriver', library, nid) for nid in definitions.values()]
 
 
 def runtime_panel_imports():
@@ -200,7 +200,7 @@ def verify(kd, dll, builds, hardware, version):
                          'text_size': len(firmware.text), 'data_size': data_size}
         exports.update(firmware.exports)
     for name in ('sysmem', 'threadmgr', 'modulemgr', 'display', 'lowio',
-                 'iofilemgr', 'oled', 'lcd', 'usbmtp'):
+                 'iofilemgr', 'oled', 'lcd', 'usbmtp', 'mtpif'):
         firmware = load_module(kd, name)
         if firmware:
             exports.update(firmware.exports)

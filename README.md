@@ -272,16 +272,21 @@ USB audio requires the firmware monitor route to be available. Capture rejects
 an already-active monitor or Bluetooth route instead of replacing its owner.
 Disable that route before retrying USB audio if necessary.
 
-VitaShell USB storage temporarily takes over the USB controller. Once storage
-stops and VitaShell attempts to restore MTP, the worker restarts vitastream
-automatically when the bus is available. The restart request survives cable
+Plugging in USB in LiveArea or a game keeps VitaStream as the capture device.
+Only VitaShell's `MtpIf` USB requests can trigger the storage handoff; low-level
+MTP shutdown used by ordinary application and power transitions is not hooked.
+Capture also starts if the optional storage hooks are not available yet, and
+retries installing them in the background. VitaShell USB storage temporarily
+takes over the USB controller. Once storage stops and VitaShell attempts to
+restore MTP, the worker restarts vitastream automatically when the bus is
+available. The restart request survives cable
 disconnection and temporary failures; the device can be armed while unplugged.
 Stopping storage while unplugged and then reconnecting does not require a
 reboot. Reconnecting while storage is still active does not take the controller
 away from storage. The host may need to reopen its capture device after
 re-enumeration. Repeated storage handoff and automatic restoration were
-confirmed on a PS Vita 1000 running firmware 3.65; other hardware and firmware
-remain unverified.
+confirmed on a PS Vita 1000 running firmware 3.65 before the scoped `MtpIf`
+hooks were added; this revision and other hardware/firmware remain unverified.
 
 Note: Remember that if anything goes wrong (like PSVita not booting) you can always press L at boot to skip plugin loading.
 

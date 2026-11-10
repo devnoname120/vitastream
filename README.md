@@ -1,3 +1,14 @@
+# Issue #9 diagnostic candidate — 2026-11-10
+
+[Download the issue #9 diagnostic ZIP](vitastream-issue-9-diagnostic-2026-11-10.zip).
+This is instrumentation, not a claimed fix. It retains the failing `70c77f5`
+capture baseline, adds precise negotiation/error-stage diagnostics and retains
+the previous boot log. It excludes the issue #10 timing change and experimental
+issue #11 suspend handler. Complete source, patch, checksums and validation
+receipts are included. [ZIP checksum](SHA256SUMS-issue-9-2026-11-10).
+
+---
+
 # Current test candidates — 2026-11-09
 
 These are test builds, not releases. Install only one SKPRX and keep your existing configuration.

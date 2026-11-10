@@ -1,3 +1,15 @@
+# Revised issue #11 suspend candidate — 2026-11-10
+
+[Download the revised suspend test ZIP](vitastream-issue-11-suspend-test-2026-11-10.zip).
+Source: `758580f` on `fix/issue-11-manual-suspend`, updated onto main `51d66bf`.
+It retains the corrected VitaShell-only USB interception, rejects incomplete
+audio/USB quiescence and adds deferred power-event/previous-boot diagnostics.
+This is a separate experimental test candidate, not a release or confirmed
+full-suspend fix. The original November 7 issue #11 ZIP remains withdrawn.
+[ZIP checksum](SHA256SUMS-issue-11-2026-11-10).
+
+---
+
 # Issue #9 diagnostic candidate — 2026-11-10
 
 [Download the issue #9 diagnostic ZIP](vitastream-issue-9-diagnostic-2026-11-10.zip).

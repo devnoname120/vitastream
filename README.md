@@ -1,12 +1,19 @@
-# Revised issue #11 suspend candidate — 2026-11-10
+# Issue #11 corrected power-phase test — 2026-11-10
 
-[Download the revised suspend test ZIP](vitastream-issue-11-suspend-test-2026-11-10.zip).
-Source: `758580f` on `fix/issue-11-manual-suspend`, updated onto main `51d66bf`.
-It retains the corrected VitaShell-only USB interception, rejects incomplete
-audio/USB quiescence and adds deferred power-event/previous-boot diagnostics.
-This is a separate experimental test candidate, not a release or confirmed
-full-suspend fix. The original November 7 issue #11 ZIP remains withdrawn.
-[ZIP checksum](SHA256SUMS-issue-11-2026-11-10).
+[Download the corrected power-phase test ZIP](vitastream-issue-11-power-phase-test-2026-11-10.zip).
+Source `cc7b84a` on `fix/issue-11-manual-suspend`. The IRQ-masked initial power
+gate is nonblocking; bounded USB preparation runs at the later IRQ-enabled
+phase and cannot veto power. This is an experimental test build for the
+reported 3.65 setup, not a confirmed fix or release.
+[ZIP checksum](SHA256SUMS-issue-11-power-phase-2026-11-10).
+
+---
+
+# Withdrawn November 10 issue #11 candidate (initial 0x100 version)
+
+The historical `vitastream-issue-11-suspend-test-2026-11-10.zip` is withdrawn.
+Its masked event-flag wait caused the power transition to abort. Its files and
+checksums remain for investigation history; use the corrected power-phase test.
 
 ---
 

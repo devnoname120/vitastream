@@ -125,10 +125,13 @@ enum { UVC_EVENT_WORK = 1, UVC_EVENT_USB_YIELDED = 2, UVC_EVENT_SUSPEND_READY = 
 
 enum { UVC_SUSPEND_IDLE, UVC_SUSPEND_REQUESTED,
 	UVC_SUSPEND_QUIESCED, UVC_SUSPEND_RESUME };
-/* ScePower emits 0x100 before SceUsbServ's later USB suspend phases.
- * Resume only after the final 0x400000 dispatch, after native USB recovery. */
+/* ScePower masks IRQs through the vetoable 0x100 gate and 0x102. It
+ * restores them before 0x20F..0x200 and ignores those phase returns.
+ * Prepare at 0x20F, before Sony's USB phase and the 0x1000 audio reset.
+ * Resume only after the final 0x400000 dispatch. */
 #define UVC_SYS_EVENT_SUSPEND_BEGIN 0x100
 #define UVC_SYS_EVENT_SUSPEND_ABORT 0x101
+#define UVC_SYS_EVENT_PREPARE_USB 0x20F
 #define UVC_SYS_EVENT_RESUME_USB 0x100000
 #define UVC_SYS_EVENT_RESUME_FINAL 0x400000
 static atomic_int uvc_suspend_state, uvc_suspend_owned;
@@ -601,6 +604,8 @@ static int uvc_suspend_quiesce_device(void)
 	int error = 0;
 	int video_ret;
 
+	if (atomic_load(&uvc_suspend_state) != UVC_SUSPEND_REQUESTED)
+		return VITASTREAM_WAIT_TIMEOUT;
 	uvc_audio_wanted = 0;
 	uvc_audio_control_dirty = 1;
 	uac_audio_request_stop();
@@ -608,14 +613,22 @@ static int uvc_suspend_quiesce_device(void)
 	uvc_video_cancel();
 
 	int ret = uac_audio_stop_sync();
+	/* A timed-out callback can let the native transition proceed. Don't
+	 * perform later teardown stages after that preparation window closes. */
+	if (atomic_load(&uvc_suspend_state) != UVC_SUSPEND_REQUESTED)
+		return VITASTREAM_WAIT_TIMEOUT;
 	diagnostic_record("suspend audio drain result", ret);
 	if (ret < 0)
 		error = ret;
 	ret = vitastream_screen_restore();
+	if (atomic_load(&uvc_suspend_state) != UVC_SUSPEND_REQUESTED)
+		return VITASTREAM_WAIT_TIMEOUT;
 	if (ret < 0)
 		diagnostic_record("suspend screen restore error", ret);
 
 	ret = ksceUdcdDeactivate();
+	if (atomic_load(&uvc_suspend_state) != UVC_SUSPEND_REQUESTED)
+		return VITASTREAM_WAIT_TIMEOUT;
 	diagnostic_record("suspend deactivate result", ret);
 	if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT && !error)
 		error = ret;
@@ -623,6 +636,8 @@ static int uvc_suspend_quiesce_device(void)
 	diagnostic_record("suspend UVC driver before stop", driver_state);
 	if (driver_state == VITASTREAM_USB_DRIVER_STARTED) {
 		ret = ksceUdcdStop(UVC_DRIVER_NAME, 0, NULL);
+		if (atomic_load(&uvc_suspend_state) != UVC_SUSPEND_REQUESTED)
+			return VITASTREAM_WAIT_TIMEOUT;
 		diagnostic_record("suspend UVC stop result", ret);
 		if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT && !error)
 			error = ret;
@@ -632,6 +647,8 @@ static int uvc_suspend_quiesce_device(void)
 	if (driver_state == VITASTREAM_USB_DRIVER_STARTED && !error)
 		error = SCE_UDCD_ERROR_DRIVER_IN_PROGRESS;
 	ret = ksceUdcdStop("USBDeviceControllerDriver", 0, NULL);
+	if (atomic_load(&uvc_suspend_state) != UVC_SUSPEND_REQUESTED)
+		return VITASTREAM_WAIT_TIMEOUT;
 	diagnostic_record("suspend controller stop result", ret);
 #ifdef DIAGNOSTIC
 	diagnostic_record("suspend controller driver raw state",
@@ -642,8 +659,10 @@ static int uvc_suspend_quiesce_device(void)
 
 	/* Never return a DMA buffer before the wake-capable controller is down. */
 	video_ret = uvc_video_release();
-	if (video_ret < 0)
+	if (video_ret < 0 && atomic_load(&uvc_suspend_state) == UVC_SUSPEND_REQUESTED)
 		video_ret = uvc_video_release();
+	if (atomic_load(&uvc_suspend_state) != UVC_SUSPEND_REQUESTED)
+		return VITASTREAM_WAIT_TIMEOUT;
 	diagnostic_record("suspend video release result", video_ret);
 	if (video_ret < 0 && !error)
 		error = video_ret;
@@ -659,9 +678,10 @@ static int uvc_suspend_worker(void)
 
 	if (atomic_load(&uvc_suspend_owned) &&
 	    !atomic_load(&uvc_suspend_quiesce_done) &&
-	    (state == UVC_SUSPEND_REQUESTED || state == UVC_SUSPEND_RESUME)) {
+	    state == UVC_SUSPEND_REQUESTED) {
 		int ret = uvc_suspend_quiesce_device();
-		diagnostic_record("quiesce UVC for system suspend", ret);
+		if (atomic_load(&uvc_suspend_state) == UVC_SUSPEND_REQUESTED)
+			diagnostic_record("quiesce UVC for system suspend", ret);
 		atomic_store(&uvc_suspend_result, ret);
 		atomic_store(&uvc_suspend_quiesce_done, 1);
 		int expected = UVC_SUSPEND_REQUESTED;
@@ -716,6 +736,7 @@ static int uvc_suspend_system_event(int resume, int event, void *args, void *opt
 	/* These callbacks can run after filesystem suspend. Only enqueue
 	 * immutable scalar records here; the video worker writes them later. */
 	if (event == UVC_SYS_EVENT_SUSPEND_BEGIN || event == UVC_SYS_EVENT_SUSPEND_ABORT ||
+	    event == UVC_SYS_EVENT_PREPARE_USB || event == 0x200 ||
 	    event == 0x102 || event == 0x1000 || event == 0x400F || event == 0x1000F ||
 	    event == UVC_SYS_EVENT_RESUME_USB || event == UVC_SYS_EVENT_RESUME_FINAL)
 		video_diag_system_event(resume, event, atomic_load(&uvc_suspend_state));
@@ -724,37 +745,54 @@ static int uvc_suspend_system_event(int resume, int event, void *args, void *opt
 		uvc_suspend_request_resume();
 		return 0;
 	}
-	if (resume || event != UVC_SYS_EVENT_SUSPEND_BEGIN)
+	if (resume || event != UVC_SYS_EVENT_PREPARE_USB)
 		return 0;
+
+	/* An event wait rejects an IRQ-masked caller (0x80028004). Never
+	 * assume that another firmware dispatches this phase with IRQs on. */
+	SceKernelIntrStatus irq = ksceKernelCpuSuspendIntr();
+	ksceKernelCpuResumeIntr(irq);
+	if (irq & 0x80u) {
+		video_diag_system_wait_result((int)0x80028004);
+		return 0;
+	}
 
 	int expected = UVC_SUSPEND_IDLE;
 	if (!atomic_compare_exchange_strong(&uvc_suspend_state, &expected,
 		UVC_SUSPEND_REQUESTED))
-		return expected == UVC_SUSPEND_QUIESCED ? 0 : VITASTREAM_WAIT_TIMEOUT;
+		return 0;
 	atomic_store(&uvc_suspend_quiesce_done, 0);
 	atomic_store(&uvc_suspend_result, 0);
 	int owned = !uvc_usb_yielded &&
 		ksceUdcdGetDrvState(UVC_DRIVER_NAME) == VITASTREAM_USB_DRIVER_STARTED;
-	atomic_store(&uvc_suspend_owned, owned);
 	if (!owned) {
 		atomic_store(&uvc_suspend_quiesce_done, 1);
 		atomic_store(&uvc_suspend_state, UVC_SUSPEND_QUIESCED);
 		return 0;
 	}
 
-	ksceKernelClearEventFlag(uvc_event_flag_id, ~UVC_EVENT_SUSPEND_READY);
-	ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_WORK);
-	SceUInt32 timeout = 4000000;
-	int ret = ksceKernelWaitEventFlag(uvc_event_flag_id,
-		UVC_EVENT_SUSPEND_READY,
-		SCE_EVENT_WAITOR | SCE_EVENT_WAITCLEAR_PAT, NULL, &timeout);
-	if (ret >= 0)
-		ret = atomic_load(&uvc_suspend_result);
-	if (ret < 0) {
-		atomic_store(&uvc_suspend_state, UVC_SUSPEND_RESUME);
-		ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_WORK);
+	/* Clear the old acknowledgement before the worker sees ownership. */
+	int ret = ksceKernelClearEventFlag(uvc_event_flag_id, ~UVC_EVENT_SUSPEND_READY);
+	if (ret >= 0) {
+		atomic_store(&uvc_suspend_owned, 1);
+		ret = ksceKernelSetEventFlag(uvc_event_flag_id, UVC_EVENT_WORK);
 	}
-	return ret;
+	if (ret >= 0) {
+		SceUInt32 timeout = 4000000;
+		ret = ksceKernelWaitEventFlag(uvc_event_flag_id, UVC_EVENT_SUSPEND_READY,
+			SCE_EVENT_WAITOR | SCE_EVENT_WAITCLEAR_PAT, NULL, &timeout);
+		if (ret >= 0 && !atomic_load(&uvc_suspend_quiesce_done))
+			ret = VITASTREAM_WAIT_TIMEOUT;
+	}
+	if (ret < 0) {
+		expected = UVC_SUSPEND_REQUESTED;
+		atomic_compare_exchange_strong(&uvc_suspend_state, &expected,
+			UVC_SUSPEND_QUIESCED);
+	}
+	video_diag_system_wait_result(ret);
+	/* Keep capture suppressed until abort/final resume, but never veto a
+	 * native standby, reboot or power-off because preparation failed. */
+	return 0;
 }
 
 static int uvc_vitashell_usb_request(void)
@@ -1603,7 +1641,7 @@ static int uvc_suspend_init(void)
 	atomic_store(&g_suspend_handler_ready, 0);
 	g_suspend_handler_id = ksceKernelRegisterSysEventHandler(
 		"vitastream", uvc_system_event_bridge, NULL);
-	diagnostic_record("suspend diagnostic schema", 1);
+	diagnostic_record("suspend diagnostic schema", 2);
 	return g_suspend_handler_id < 0 ? g_suspend_handler_id : 0;
 }
 

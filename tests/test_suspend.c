@@ -15,6 +15,7 @@
 #define SCE_UDCD_ERROR_DRIVER_IN_PROGRESS ((int)0x80243006)
 typedef int32_t SceUID;
 typedef uint32_t SceUInt32;
+typedef uint32_t SceKernelIntrStatus;
 typedef int (*SceSysEventHandler)(int, int, void *, void *);
 
 static atomic_int uvc_thread_run, uvc_usb_yielded, uvc_recover_pending;
@@ -28,9 +29,18 @@ static struct {
 	int stop_uvc_error, stop_controller_error, start_error, wait_error;
 	int register_error, unregister_error, registrations, unregisters;
 	int keep_uvc_started;
+	SceKernelIntrStatus irq_mask;
 	unsigned int event_bits;
 	void (*on_wait)(void);
+	void (*on_audio_stop)(void);
 } mock;
+
+static SceKernelIntrStatus ksceKernelCpuSuspendIntr(void) {return mock.irq_mask;}
+static SceKernelIntrStatus ksceKernelCpuResumeIntr(SceKernelIntrStatus mask)
+{
+	assert(mask == mock.irq_mask);
+	return mask;
+}
 
 static int ksceUdcdGetDrvState(const char *name)
 {
@@ -76,6 +86,7 @@ static void uac_audio_request_stop(void) {mock.audio_requests++;}
 static int uac_audio_stop_sync(void)
 {
 	mock.audio_stops++;
+	if (mock.on_audio_stop) mock.on_audio_stop();
 	return mock.audio_error;
 }
 static int uvc_video_release(void)
@@ -143,6 +154,10 @@ static void run_worker(void)
 {
 	(void)uvc_suspend_worker();
 }
+static void expire_preparation(void)
+{
+	atomic_store(&uvc_suspend_state, UVC_SUSPEND_QUIESCED);
+}
 static void reset(void)
 {
 	memset(&mock, 0, sizeof(mock));
@@ -159,8 +174,10 @@ static void reset(void)
 }
 static void suspend_success(void)
 {
-	mock.on_wait = run_worker;
 	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == 0);
+	assert(!mock.waits && !mock.deactivates && !uvc_suspend_active());
+	mock.on_wait = run_worker;
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_PREPARE_USB, NULL, NULL) == 0);
 	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_QUIESCED);
 	assert(uvc_suspend_active());
 	assert(uvc_suspend_blocks_usb_start());
@@ -200,13 +217,13 @@ int main(void)
 	assert(!mock.waits && atomic_load(&uvc_suspend_state) == UVC_SUSPEND_IDLE);
 
 	reset(); mock.uvc_state = VITASTREAM_USB_DRIVER_REGISTERED;
-	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == 0);
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_PREPARE_USB, NULL, NULL) == 0);
 	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_QUIESCED && !mock.waits);
 	assert(uvc_suspend_system_event(1, UVC_SYS_EVENT_RESUME_FINAL, NULL, NULL) == 0);
 	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_IDLE && !mock.starts);
 
 	reset(); uvc_usb_yielded = 1;
-	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == 0);
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_PREPARE_USB, NULL, NULL) == 0);
 	assert(uvc_suspend_system_event(1, UVC_SYS_EVENT_RESUME_FINAL, NULL, NULL) == 0);
 	assert(!mock.waits && !mock.starts && uvc_usb_yielded);
 
@@ -230,26 +247,46 @@ int main(void)
 	assert(uvc_suspend_worker() == 0 && !mock.starts && uvc_usb_yielded);
 	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_IDLE);
 
+	/* The vetoable early phase must do nothing even with IRQs masked. */
+	reset(); mock.irq_mask = 0x80;
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == 0);
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_PREPARE_USB, NULL, NULL) == 0);
+	assert(!mock.waits && !mock.deactivates && !uvc_suspend_active());
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_ABORT, NULL, NULL) == 0);
+	assert(!mock.starts && uvc_suspend_worker() == 0);
+
+	/* Timeout must allow native power to continue, and must not start late
+	 * teardown or USB restoration during native suspend. */
 	reset(); mock.wait_error = SCE_KERNEL_ERROR_WAIT_TIMEOUT;
-	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == SCE_KERNEL_ERROR_WAIT_TIMEOUT);
-	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_RESUME);
-	assert(uvc_suspend_worker() == 0 && mock.deactivates == 1 && mock.starts == 1);
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_PREPARE_USB, NULL, NULL) == 0);
+	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_QUIESCED);
+	assert(uvc_suspend_worker() == 1 && !mock.deactivates && !mock.starts);
+	assert(uvc_suspend_system_event(1, UVC_SYS_EVENT_RESUME_FINAL, NULL, NULL) == 0);
+	assert(uvc_suspend_worker() == 0 && !mock.deactivates && mock.starts == 1);
+
+	reset(); mock.on_wait = run_worker; mock.on_audio_stop = expire_preparation;
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_PREPARE_USB, NULL, NULL) == 0);
+	assert(atomic_load(&uvc_suspend_result) == SCE_KERNEL_ERROR_WAIT_TIMEOUT);
+	assert(!mock.deactivates && !mock.stop_controller && !mock.releases && !mock.starts);
 
 	reset(); mock.audio_error = -71; mock.release_errors = 1; mock.on_wait = run_worker;
-	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == -71);
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_PREPARE_USB, NULL, NULL) == 0);
+	assert(atomic_load(&uvc_suspend_result) == -71);
 	assert(mock.releases == 2 && mock.deactivates == 1 && mock.stop_controller == 1);
-	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_RESUME);
+	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_QUIESCED && !mock.starts);
 
 	/* A successful Stop return does not excuse a still-started custom driver. */
 	reset(); mock.keep_uvc_started = 1; mock.on_wait = run_worker;
-	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) ==
-		SCE_UDCD_ERROR_DRIVER_IN_PROGRESS);
-	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_RESUME);
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_PREPARE_USB, NULL, NULL) == 0);
+	assert(atomic_load(&uvc_suspend_result) == SCE_UDCD_ERROR_DRIVER_IN_PROGRESS);
+	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_QUIESCED && !mock.starts);
 
 	reset(); mock.stop_controller_error = -73; mock.on_wait = run_worker;
-	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == -73);
-	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_RESUME);
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_PREPARE_USB, NULL, NULL) == 0);
+	assert(atomic_load(&uvc_suspend_result) == -73);
+	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_QUIESCED && !mock.starts);
 	mock.stop_controller_error = 0;
+	assert(uvc_suspend_system_event(1, UVC_SYS_EVENT_RESUME_FINAL, NULL, NULL) == 0);
 	assert(uvc_suspend_worker() == 0 && mock.starts == 1);
 
 	reset(); suspend_success();
@@ -262,6 +299,6 @@ int main(void)
 	mock.start_error = 0;
 	assert(uvc_suspend_worker() == 0 && mock.starts == 2);
 
-	puts("suspend: early quiesce, abort recovery, final-resume restart and retry gates passed");
+	puts("suspend: IRQ-safe preparation, non-veto failures, late cancellation, abort and resume passed");
 	return 0;
 }

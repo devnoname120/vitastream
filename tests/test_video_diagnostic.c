@@ -142,11 +142,13 @@ int main(void)
 	callback_context = 1;
 	video_diag_system_event(0, 0x100, 1);
 	video_diag_system_event(1, 0x400000, 2);
+	video_diag_system_wait_result((int)0x80028004);
 	callback_context = 0;
 	assert(opens == before);
 	video_diag_flush();
 	assert(strstr(files[0].text, "system event id 0x00000100\n"));
 	assert(strstr(files[0].text, "system event id 0x00400000\n"));
+	assert(strstr(files[0].text, "system quiesce wait result 0x80028004\n"));
 	puts("video diagnostics: deferred callbacks, mode mismatch, bounded errors, source swaps and boot-log retention passed");
 	return 0;
 }

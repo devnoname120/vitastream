@@ -53,6 +53,11 @@ void video_diag_system_event(int resume, int event, int state)
 		(unsigned int)event, (unsigned int)state, 0, 0);
 }
 
+void video_diag_system_wait_result(int result)
+{
+	video_diag_control(VIDEO_DIAG_SYSTEM_WAIT, (unsigned int)result, 0, 0, 0, 0);
+}
+
 void video_diag_flush(void)
 {
 	static const char *const labels[][6] = {
@@ -70,6 +75,10 @@ void video_diag_flush(void)
 			diagnostic_record("system event direction", (int)record.format);
 			diagnostic_record("system event id", (int)record.frame);
 			diagnostic_record("system event capture state", (int)record.interval);
+			continue;
+		}
+		if (record.event == VIDEO_DIAG_SYSTEM_WAIT) {
+			diagnostic_record("system quiesce wait result", (int)record.format);
 			continue;
 		}
 		if (record.event > VIDEO_DIAG_COMMIT)

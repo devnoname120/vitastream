@@ -17,6 +17,8 @@ REPO = Path(__file__).resolve().parents[1]
 VERSIONS = ('3.60', '3.61', '3.63', '3.65', '3.67', '3.68',
             '3.69', '3.70', '3.71', '3.72', '3.73', '3.74')
 MODULES = ('udcd', 'audio', 'dmacmgr')
+DISPLAY_SCANLINE_CODE_SIZE = 0x3C
+DISPLAY_SCANLINE_CODE_SHA256 = '2a0f4f10773a7c7a7c00d71b86e41a921d487dcee2d0d4a24fdb490807f0ae4d'
 
 
 class Firmware:
@@ -147,11 +149,23 @@ def runtime_mtp_imports():
     definitions = {}
     for line in (REPO / 'src/main.c').read_text().splitlines():
         fields = line.split()
-        if len(fields) == 3 and fields[0] == '#define' and fields[1].startswith('SCE_USB_MTP_') and fields[1].endswith('_NID'):
+        if len(fields) == 3 and fields[0] == '#define' and fields[1].startswith('SCE_MTP_IF_') and fields[1].endswith('_NID'):
             definitions[fields[1]] = int(fields[2], 0)
-    library = definitions.pop('SCE_USB_MTP_FOR_DRIVER_NID')
+    library = definitions.pop('SCE_MTP_IF_FOR_DRIVER_NID')
     assert len(definitions) == 2, 'Update the runtime MTP export coverage'
-    return [('SceUsbMtp', library, nid) for nid in definitions.values()]
+    return [('SceMtpIfDriver', library, nid) for nid in definitions.values()]
+
+
+def runtime_display_imports():
+    definitions = {}
+    for line in (REPO / 'src/main.c').read_text().splitlines():
+        fields = line.split()
+        if len(fields) == 3 and fields[0] == '#define' and fields[1] in (
+                'SCE_DISPLAY_FOR_DRIVER_NID', 'SCE_DISPLAY_GET_SCANLINE_NID'):
+            definitions[fields[1]] = int(fields[2], 0)
+    assert len(definitions) == 2, 'Update the dynamic display export coverage'
+    return [('SceDisplay', definitions['SCE_DISPLAY_FOR_DRIVER_NID'],
+             definitions['SCE_DISPLAY_GET_SCANLINE_NID'])]
 
 
 def runtime_panel_imports():
@@ -199,10 +213,12 @@ def verify(kd, dll, builds, hardware, version):
                          'code_sha256': firmware.code_hash,
                          'text_size': len(firmware.text), 'data_size': data_size}
         exports.update(firmware.exports)
+    runtime_modules = {}
     for name in ('sysmem', 'threadmgr', 'modulemgr', 'display', 'lowio',
-                 'iofilemgr', 'oled', 'lcd', 'usbmtp'):
+                 'iofilemgr', 'oled', 'lcd', 'usbmtp', 'mtpif'):
         firmware = load_module(kd, name)
         if firmware:
+            runtime_modules[name] = firmware
             exports.update(firmware.exports)
     imports_verified = {}
     for label, imports in builds.items():
@@ -226,11 +242,24 @@ def verify(kd, dll, builds, hardware, version):
     for name, library, function in mtp:
         assert (library, function) in exports, (
             hardware, version, name, hex(library), hex(function))
+    display = runtime_display_imports()
+    for name, library, function in display:
+        assert (library, function) in exports, (
+            hardware, version, name, hex(library), hex(function))
+        firmware = runtime_modules['display']
+        address = firmware.exports[library, function] & ~1
+        signature = hashlib.sha256(
+            firmware.read(address, DISPLAY_SCANLINE_CODE_SIZE)).hexdigest()
+        assert signature == DISPLAY_SCANLINE_CODE_SHA256, (
+            hardware, version, name, signature)
     return {'hardware': hardware, 'firmware': version, 'modules': modules,
             'imports_verified': imports_verified,
             'runtime_audio_exports_verified': len(dynamic),
             'runtime_panel_exports_verified': len(panels),
-            'runtime_mtp_exports_verified': len(mtp), 'device_tested': False}
+            'runtime_mtp_exports_verified': len(mtp),
+            'runtime_display_exports_verified': len(display),
+            'runtime_display_code_sha256': DISPLAY_SCANLINE_CODE_SHA256,
+            'device_tested': False}
 
 
 def run(args, dll):

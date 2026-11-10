@@ -21,7 +21,7 @@ prefix = ""
 if args.suspend:
     regions = (
         ("enum { UVC_EVENT_WORK", "static int usb_ep0_req_send("),
-        ("static int uvc_suspend_quiesce_device(void)", "static int mtp_stop_for_external_owner(void)"),
+        ("static int uvc_suspend_quiesce_device(void)", "static int uvc_vitashell_usb_request(void)"),
         ("static int uvc_system_event_bridge(", "void _start()"),
     )
     parts = []
@@ -58,7 +58,7 @@ elif args.usb_recovery:
     end = "static inline unsigned int display_to_iftu_pixelformat("
 elif args.conversion:
     begin = "static inline unsigned int display_to_iftu_pixelformat("
-    end = "static int send_frame(void)\n{"
+    end = "#define SCE_DISPLAY_FOR_DRIVER_NID"
 elif args.startup:
     begin = "int module_start(SceSize argc, const void *args)\n{"
     end = "int module_stop(SceSize argc, const void *args)\n{"
@@ -75,7 +75,7 @@ elif args.controls:
     begin = "static void uvc_handle_video_streaming_req_recv("
     end = "void usb_ep0_req_recv_on_complete(SceUdcdDeviceRequest *req)\n{"
 else:
-    begin = "static int send_frame(void)\n{"
+    begin = "#define SCE_DISPLAY_FOR_DRIVER_NID"
     end = "static int display_vblank_cb_func("
 if text.count(begin) != 1 or (end and text.count(end) != 1):
     raise SystemExit("Function boundaries changed; update the test extraction.")

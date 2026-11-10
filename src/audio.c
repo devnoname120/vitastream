@@ -26,6 +26,7 @@
 #define AUDIO_MONITOR_NOT_READBACK		(-2)
 #define AUDIO_ROUTE_RECOVERY_LIMIT		4
 #define AUDIO_ROUTE_RECOVERY_STABLE_BLOCKS	32
+#define AUDIO_ROUTE_SETTLE_BLOCKS		2
 /* Retain the working capture affinity. The relay has no plugin callback;
  * its public completion wait and stop fence own the DMA-buffer lifetime. */
 #define AUDIO_CAPTURE_CPU_AFFINITY		0x00010000
@@ -613,7 +614,11 @@ static void audio_capture_mark_stopped(void)
 static int audio_capture_run(unsigned int generation)
 {
 	unsigned int current = 0;
-	unsigned int route_recoveries = 0, stable_blocks = 0, discard_blocks = 0;
+	unsigned int route_recoveries = 0, stable_blocks = 0;
+	/* SetPathMode updates the requested mode; Sony's two queued MAIN
+	 * transfers can still target I2S until its DMA callbacks apply it.
+	 * Do not start our I2S writer while those transfers are draining. */
+	unsigned int discard_blocks = AUDIO_ROUTE_SETTLE_BLOCKS;
 	int ret, capture_started = 0;
 restart_capture:
 	if (!ksceKernelAtomicGetAndAdd32(&g_audio_desired, 0) ||
@@ -743,7 +748,7 @@ capture_read_failed:
 			/* Flush stale output and let the native route transition
 			 * leave its pipeline before resuming our local writer. */
 			audio_ring_reset();
-			discard_blocks = 2;
+			discard_blocks = AUDIO_ROUTE_SETTLE_BLOCKS;
 			current = 0;
 			goto restart_capture;
 		}

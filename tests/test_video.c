@@ -452,15 +452,59 @@ static atomic_int uvc_thread_run, stream, uvc_usb_yielded;
 typedef struct {
 	SceSize size;
 	uintptr_t paddr;
-	unsigned char unused[32];
+	struct {
+		void *base;
+		unsigned int width, height, pitch, pixelformat;
+	} framebuf;
 } SceDisplayFrameBufInfo;
 
 static struct {
-	uintptr_t source;
-	int queries, conversions;
-	int first_error, first_empty, all_error, all_empty, convert_error;
-	int action;
+	uintptr_t source, converted_source;
+	unsigned int width, height, pitch;
+	int queries, conversions, resolver_calls, scanline_reads, delays;
+	int first_error, first_empty, all_error, all_empty, convert_error, resolver_error;
+	int action, scanline_index, scanline_count;
+	int scanlines[16];
+	void (*on_delay)(void);
 } capture;
+
+#define KERNEL_PID 0x10005
+
+static int capture_scanline(int head)
+{
+	assert(head == 2);
+	capture.scanline_reads++;
+	assert(capture.scanline_count > 0);
+	int index = capture.scanline_index;
+	if (capture.scanline_index + 1 < capture.scanline_count)
+		capture.scanline_index++;
+	return capture.scanlines[index];
+}
+
+int module_get_export_func(SceUID pid, const char *module, uint32_t library,
+	uint32_t function, uintptr_t *address)
+{
+	assert(pid == KERNEL_PID);
+	assert(!strcmp(module, "SceDisplay"));
+	assert(library == 0x9FED47AC && function == 0x332C5410);
+	capture.resolver_calls++;
+	if (capture.resolver_error)
+		return MOCK_ERROR;
+	*address = (uintptr_t)capture_scanline;
+	return 0;
+}
+
+int ksceKernelDelayThread(SceUInt32 microseconds)
+{
+	assert(microseconds == 250);
+	capture.delays++;
+	if (capture.on_delay) {
+		void (*hook)(void) = capture.on_delay;
+		capture.on_delay = NULL;
+		hook();
+	}
+	return 0;
+}
 
 static int ksceDisplayGetPrimaryHead(void)
 {
@@ -472,12 +516,13 @@ static int ksceDisplayGetProcFrameBufInternal(SceUID pid, int head, int index,
 {
 	assert(pid == -1 && head == 2);
 	assert(info->size == sizeof(*info));
-	for (unsigned int i = 0; i < sizeof(info->unused); i++)
-		assert(info->unused[i] == 0);
 	capture.queries++;
 	if (capture.all_error || (!index && capture.first_error))
 		return MOCK_ERROR;
 	info->paddr = capture.all_empty || (!index && capture.first_empty) ? 0 : capture.source;
+	info->framebuf.width = capture.width;
+	info->framebuf.height = capture.height;
+	info->framebuf.pitch = capture.pitch;
 	return 0;
 }
 
@@ -489,6 +534,7 @@ static int frame_convert_to_nv12(uintptr_t dst, const SceDisplayFrameBufInfo *in
 		.data_paddr = dst
 	};
 	assert(info->paddr == capture.source);
+	capture.converted_source = info->paddr;
 	capture.conversions++;
 	if (capture.convert_error)
 		return MOCK_ERROR;
@@ -503,6 +549,9 @@ static void setup_capture(void)
 	setup();
 	memset(&capture, 0, sizeof(capture));
 	capture.source = 0x1000;
+	capture.width = 960;
+	capture.height = 544;
+	capture.pitch = 1024;
 	uvc_probe_control_setting.bFrameIndex = 1;
 	uvc_probe_control_setting.bFormatIndex = FORMAT_INDEX_UNCOMPRESSED_NV12;
 	uvc_thread_run = stream = 1;
@@ -599,6 +648,57 @@ static void test_capture_samples_source_after_buffer_wait(void)
 	assert(send_frame() == 0);
 	assert(capture.queries == 2 && capture.conversions == 2);
 	assert(capture.source == 0x2000 && mock.sends == 2);
+	teardown();
+}
+
+static void test_capture_compat_surface_phase(void)
+{
+	setup_capture();
+	capture.width = 480;
+	capture.height = 272;
+	capture.pitch = 512;
+	capture.resolver_error = 1;
+	assert(send_frame() == 0);
+	assert(capture.resolver_calls == 1 && !capture.scanline_reads && !capture.delays);
+	assert(capture.queries == 1 && capture.conversions == 1);
+	teardown();
+
+	setup_capture();
+	capture.width = 480;
+	capture.height = 272;
+	capture.pitch = 512;
+	int scanlines[] = {550, 560, 20, 160, 288};
+	memcpy(capture.scanlines, scanlines, sizeof(scanlines));
+	capture.scanline_count = sizeof(scanlines) / sizeof(scanlines[0]);
+	capture.on_delay = advance_capture_source;
+	assert(send_frame() == 0);
+	assert(capture.resolver_calls == 1 && capture.scanline_reads == 5);
+	assert(capture.delays == 4 && capture.queries == 2);
+	assert(capture.converted_source == 0x2000 && capture.conversions == 1);
+	assert(mock.sends == 1);
+	teardown();
+
+	setup_capture();
+	capture.width = 480;
+	capture.height = 272;
+	capture.pitch = 512;
+	int stopping_scanlines[] = {550, 560, 20, 288};
+	memcpy(capture.scanlines, stopping_scanlines, sizeof(stopping_scanlines));
+	capture.scanline_count = sizeof(stopping_scanlines) / sizeof(stopping_scanlines[0]);
+	capture.on_delay = change_capture_state;
+	assert(send_frame() == 0);
+	assert(capture.delays == 1 && !capture.conversions && !mock.sends);
+	teardown();
+
+	setup_capture();
+	capture.width = 480;
+	capture.height = 272;
+	capture.pitch = 512;
+	capture.scanlines[0] = 550;
+	capture.scanline_count = 1;
+	assert(send_frame() == (int)0x80028005);
+	assert(capture.scanline_reads == 80 && capture.delays == 79);
+	assert(!capture.conversions && !mock.sends);
 	teardown();
 }
 
@@ -782,11 +882,12 @@ int main(void)
 	test_capture_state_changes_during_wait();
 	test_capture_state_changes_during_submit();
 	test_capture_samples_source_after_buffer_wait();
+	test_capture_compat_surface_phase();
 	test_capture_conversion_and_transfer_errors();
 #ifdef UVC_VIDEO_KERNEL_POOL
-	printf("video: 16 test groups passed (single buffer, kernel-pool comparison)\n");
+	printf("video: 17 test groups passed (single buffer, kernel-pool comparison)\n");
 #else
-	printf("video: 18 test groups passed (%d buffer configuration)\n", UVC_FRAMEBUFFER_COUNT);
+	printf("video: 19 test groups passed (%d buffer configuration)\n", UVC_FRAMEBUFFER_COUNT);
 #endif
 	return 0;
 }

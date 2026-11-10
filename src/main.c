@@ -2,6 +2,7 @@
 #include <psp2kern/kernel/threadmgr.h>
 #include <psp2kern/kernel/threadmgr/fast_mutex.h>
 #include <psp2kern/kernel/sysmem.h>
+#include <psp2kern/kernel/sysroot.h>
 #include <psp2kern/kernel/sysmem/uid_guid.h>
 #include <psp2kern/kernel/cpu.h>
 #include <psp2kern/kernel/suspend.h>
@@ -44,9 +45,9 @@
 #define UVC_DRIVER_NAME			"vitastream"
 #define UVC_USB_PID			0x1337
 
-#define SCE_USB_MTP_FOR_DRIVER_NID	0xF0122DB1
-#define SCE_USB_MTP_STOP_DRIVER_NID	0x08CD359F
-#define SCE_USB_MTP_START_DRIVER_NID	0x6FC97594
+#define SCE_MTP_IF_FOR_DRIVER_NID		0x73309DFE
+#define SCE_MTP_IF_STOP_DRIVER_NID	0xFDF8C3C0
+#define SCE_MTP_IF_START_DRIVER_NID	0xCB685AC0
 
 #define SCE_DISPLAY_PIXELFORMAT_BGRA5551 0x50000000
 
@@ -54,6 +55,8 @@
 int ksceKernelProcModeVAtoPA(SceUID pid, SceUInt32 permission,
 	const void *va, void **pa);
 int ksceKernelUnregisterSysEventHandler(SceUID id);
+int module_get_export_func(SceUID pid, const char *module_name,
+	uint32_t library_nid, uint32_t function_nid, uintptr_t *function);
 
 /* Compatibility copy of the corrected SceIftuPlaneState definition. */
 typedef struct SceIftuPlaneState_updated {
@@ -732,12 +735,24 @@ static int uvc_suspend_system_event(int resume, int event, void *args, void *opt
 	return ret;
 }
 
-static int mtp_stop_for_external_owner(void)
+static int uvc_vitashell_usb_request(void)
 {
-	/* SceMtpIfStopDriver(1), used by VitaShell, calls this kernel export.
-	 * Pause before Sony checks its MTP-only state, which cannot see UVC. */
-	if (!uvc_thread_run)
-		return TAI_CONTINUE(int, g_mtp_stop_hook_ref);
+	/* MtpIf is also used by SceShell's CMA connection manager. Its syscall
+	 * wrapper calls the driver exports synchronously in the
+	 * requesting process, so only VitaShell's USB lifecycle may yield UVC. */
+	char title_id[16] = {0};
+	SceUID pid = ksceKernelGetProcessId();
+	return pid > 0 && pid != KERNEL_PID &&
+		ksceKernelSysrootGetProcessTitleId(pid, title_id, sizeof(title_id)) >= 0 &&
+		memcmp(title_id, "VITASHELL", sizeof("VITASHELL")) == 0;
+}
+
+static int mtp_stop_for_external_owner(int kind)
+{
+	/* Hook the storage-facing MtpIf wrapper, not the shared low-level MTP
+	 * stop used during application/power transitions. */
+	if (kind != 1 || !uvc_thread_run || !uvc_vitashell_usb_request())
+		return TAI_CONTINUE(int, g_mtp_stop_hook_ref, kind);
 	ksceKernelLockFastMutex(&g_usb_handoff_mutex);
 	int ret;
 	/* Also honour requests arriving just before uvc_start: the worker's
@@ -759,7 +774,7 @@ static int mtp_stop_for_external_owner(void)
 		if (ret < 0)
 			goto out;
 	}
-	ret = TAI_CONTINUE(int, g_mtp_stop_hook_ref);
+	ret = TAI_CONTINUE(int, g_mtp_stop_hook_ref, kind);
 	/* Taking UVC over stopped the underlying MTP driver directly, leaving
 	 * Sony's service-level started flag intact. Restore just its backend if
 	 * necessary so its own Stop can finish normal bookkeeping. No activate
@@ -771,7 +786,7 @@ static int mtp_stop_for_external_owner(void)
 		if (ret >= 0 || ret == SCE_UDCD_ERROR_INVALID_ARGUMENT) {
 			ret = ksceUdcdStart("USB_MTP_Driver", 0, NULL);
 			if (ret >= 0)
-				ret = TAI_CONTINUE(int, g_mtp_stop_hook_ref);
+				ret = TAI_CONTINUE(int, g_mtp_stop_hook_ref, kind);
 		}
 	}
 out:
@@ -780,12 +795,12 @@ out:
 	return ret;
 }
 
-static int mtp_start_after_external_owner(void)
+static int mtp_start_after_external_owner(int kind)
 {
-	if (!uvc_thread_run)
-		return TAI_CONTINUE(int, g_mtp_start_hook_ref);
+	if (kind != 1 || !uvc_thread_run || !uvc_vitashell_usb_request())
+		return TAI_CONTINUE(int, g_mtp_start_hook_ref, kind);
 	ksceKernelLockFastMutex(&g_usb_handoff_mutex);
-	int ret = TAI_CONTINUE(int, g_mtp_start_hook_ref);
+	int ret = TAI_CONTINUE(int, g_mtp_start_hook_ref, kind);
 	if (uvc_usb_yielded) {
 		/* VitaShell calls this after storage Stop succeeds, including with
 		 * the cable unplugged. Retain intent even if MTP cannot activate:
@@ -814,19 +829,19 @@ static int uvc_install_mtp_handoff(void)
 	 * existing Start hook remains valid and the module remains resident. */
 	if (atomic_load(&g_mtp_start_hook_uid) < 0) {
 		ret = taiHookFunctionExportForKernel(KERNEL_PID, &g_mtp_start_hook_ref,
-			"SceUsbMtp", SCE_USB_MTP_FOR_DRIVER_NID,
-			SCE_USB_MTP_START_DRIVER_NID, mtp_start_after_external_owner);
+			"SceMtpIfDriver", SCE_MTP_IF_FOR_DRIVER_NID,
+			SCE_MTP_IF_START_DRIVER_NID, mtp_start_after_external_owner);
 		if (ret < 0)
 			goto failed;
 		atomic_store(&g_mtp_start_hook_uid, ret);
 	}
 	ret = taiHookFunctionExportForKernel(KERNEL_PID, &g_mtp_stop_hook_ref,
-		"SceUsbMtp", SCE_USB_MTP_FOR_DRIVER_NID,
-		SCE_USB_MTP_STOP_DRIVER_NID, mtp_stop_for_external_owner);
+		"SceMtpIfDriver", SCE_MTP_IF_FOR_DRIVER_NID,
+		SCE_MTP_IF_STOP_DRIVER_NID, mtp_stop_for_external_owner);
 	if (ret < 0)
 		goto failed;
 	atomic_store(&g_mtp_stop_hook_uid, ret);
-	diagnostic_record("install MTP handoff hook", 0);
+	diagnostic_record("install VitaShell MtpIf handoff hooks", 0);
 	return 0;
 failed:
 	atomic_store(&g_mtp_stop_hook_uid, MTP_HOOK_IDLE);
@@ -1082,6 +1097,78 @@ release_process:
 	return ret;
 }
 
+#define SCE_DISPLAY_FOR_DRIVER_NID 0x9FED47AC
+#define SCE_DISPLAY_GET_SCANLINE_NID 0x332C5410
+#define COMPAT_FRAME_WIDTH 480u
+#define COMPAT_FRAME_HEIGHT 272u
+#define COMPAT_FRAME_PITCH 512u
+#define COMPAT_CAPTURE_LINE_MIN 288
+#define COMPAT_CAPTURE_LINE_MAX 352
+#define COMPAT_CAPTURE_POLL_US 250u
+#define COMPAT_CAPTURE_POLL_LIMIT 80u
+
+typedef int (*DisplayGetScanlineFn)(int head);
+static DisplayGetScanlineFn g_display_get_scanline;
+
+static int capture_query_framebuffer(int head, SceDisplayFrameBufInfo *fb_info)
+{
+	int ret;
+
+	memset(fb_info, 0, sizeof(*fb_info));
+	fb_info->size = sizeof(*fb_info);
+	ret = ksceDisplayGetProcFrameBufInternal(-1, head, 0, fb_info);
+	if (ret < 0 || !fb_info->paddr) {
+		memset(fb_info, 0, sizeof(*fb_info));
+		fb_info->size = sizeof(*fb_info);
+		ret = ksceDisplayGetProcFrameBufInternal(-1, head, 1, fb_info);
+	}
+	if (ret < 0)
+		return ret;
+	return fb_info->paddr ? 0 : SCE_UDCD_ERROR_INVALID_ARGUMENT;
+}
+
+static int capture_is_compat_surface(const SceDisplayFrameBufInfo *fb_info)
+{
+	return fb_info->framebuf.width == COMPAT_FRAME_WIDTH &&
+	       fb_info->framebuf.height == COMPAT_FRAME_HEIGHT &&
+	       fb_info->framebuf.pitch == COMPAT_FRAME_PITCH;
+}
+
+static int capture_wait_compat_surface(int head,
+	const SceDisplayFrameBufInfo *fb_info)
+{
+	if (!capture_is_compat_surface(fb_info))
+		return 0;
+
+	if (!g_display_get_scanline) {
+		uintptr_t function = 0;
+		int ret = module_get_export_func(KERNEL_PID, "SceDisplay",
+			SCE_DISPLAY_FOR_DRIVER_NID, SCE_DISPLAY_GET_SCANLINE_NID,
+			&function);
+		if (ret < 0 || !function)
+			return 0;
+		g_display_get_scanline = (DisplayGetScanlineFn)function;
+	}
+
+	/* SceCompat rewrites its single 480x272 surface at the display boundary.
+	 * Sampling near the middle of the next scan avoids that mutable interval. */
+	for (unsigned int i = 0; i < COMPAT_CAPTURE_POLL_LIMIT; i++) {
+		if (!uvc_thread_run || !stream)
+			return 0;
+		int line = g_display_get_scanline(head);
+		if (line < 0)
+			return 0;
+		if (line >= COMPAT_CAPTURE_LINE_MIN && line < COMPAT_CAPTURE_LINE_MAX)
+			return 1;
+		if (i + 1 == COMPAT_CAPTURE_POLL_LIMIT)
+			break;
+		int ret = ksceKernelDelayThread(COMPAT_CAPTURE_POLL_US);
+		if (ret < 0)
+			return ret;
+	}
+	return (int)0x80028005;
+}
+
 static int send_frame(void)
 {
 	static int fid;
@@ -1113,15 +1200,22 @@ static int send_frame(void)
 		return 0;
 
 	head = ksceDisplayGetPrimaryHead();
-	memset(&fb_info, 0, sizeof(fb_info));
-	fb_info.size = sizeof(fb_info);
-	ret = ksceDisplayGetProcFrameBufInternal(-1, head, 0, &fb_info);
-	if (ret < 0 || fb_info.paddr == 0)
-		ret = ksceDisplayGetProcFrameBufInternal(-1, head, 1, &fb_info);
+	ret = capture_query_framebuffer(head, &fb_info);
 	if (ret < 0)
 		return ret;
-	if (!fb_info.paddr)
-		return SCE_UDCD_ERROR_INVALID_ARGUMENT;
+	ret = capture_wait_compat_surface(head, &fb_info);
+	if (ret < 0)
+		return ret;
+	if (!uvc_thread_run || !stream ||
+		frame_index != uvc_probe_control_setting.bFrameIndex ||
+		format_index != uvc_probe_control_setting.bFormatIndex)
+		return 0;
+	if (ret > 0) {
+		/* The producer may replace the surface while capture is phase-aligned. */
+		ret = capture_query_framebuffer(head, &fb_info);
+		if (ret < 0)
+			return ret;
+	}
 
 #ifdef DEBUG
 	time1 = ksceKernelGetSystemTimeWide();
@@ -1208,6 +1302,7 @@ static int uvc_thread(SceSize args, void *argp)
 	SceUID display_vblank_cb_uid;
 	int start_result;
 	int video_progress = 0;
+	uint64_t mtp_hook_retry_after = 0;
 #if 0
 	/*
 	 * Wait until the MTP driver starts to takeover.
@@ -1229,18 +1324,16 @@ static int uvc_thread(SceSize args, void *argp)
 	if (!uvc_thread_run)
 		return 0;
 	vitastream_settings_load();
-	/* Sony's MTP service may finish loading after early kernel plugins. The
-	 * handoff hook must be published before taking its underlying USB bus. */
-	for (unsigned int attempt = 0; ; attempt++) {
-		start_result = uvc_install_mtp_handoff();
-		if (start_result >= 0 || !uvc_thread_run || attempt == 9)
-			break;
-		ksceKernelDelayThread(1000000);
-	}
-	if (start_result < 0 || !uvc_thread_run) {
-		diagnostic_record("MTP handoff hook unavailable", start_result);
+	/* Storage support is optional at boot. MtpIf can load later; absence
+	 * must not leave Sony MTP in control instead of starting capture. */
+	start_result = uvc_install_mtp_handoff();
+	if (!uvc_thread_run || !g_usb_handoff_mutex_initialized) {
+		diagnostic_record("USB handoff initialization failed", start_result);
 		return start_result;
 	}
+	if (start_result < 0)
+		diagnostic_record("MtpIf hook deferred; starting capture", start_result);
+	mtp_hook_retry_after = ksceKernelGetSystemTimeWide() + 1000000;
 	if (ksceKernelTryLockFastMutex(&g_usb_handoff_mutex) < 0) {
 		/* Let the MTP request finish. The worker's recovery path will
 		 * retry takeover; it must not wait behind a Stop awaiting us. */
@@ -1288,6 +1381,11 @@ static int uvc_thread(SceSize args, void *argp)
 			video_progress = 0;
 			vitastream_nosleep_update(0);
 			continue;
+		}
+		if (atomic_load(&g_mtp_stop_hook_uid) < 0 &&
+		    ksceKernelGetSystemTimeWide() >= mtp_hook_retry_after) {
+			uvc_install_mtp_handoff();
+			mtp_hook_retry_after = ksceKernelGetSystemTimeWide() + 1000000;
 		}
 		if (uvc_usb_yielded) {
 			static int last_handoff_error;

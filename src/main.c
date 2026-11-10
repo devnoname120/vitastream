@@ -14,6 +14,7 @@
 #include <stdatomic.h>
 #include "audio.h"
 #include "diagnostic.h"
+#include "video_diagnostic.h"
 #include "firmware.h"
 #include "firmware_profiles.h"
 #include "usb_descriptors.h"
@@ -607,21 +608,35 @@ static int uvc_suspend_quiesce_device(void)
 	uvc_video_cancel();
 
 	int ret = uac_audio_stop_sync();
+	diagnostic_record("suspend audio drain result", ret);
 	if (ret < 0)
-		diagnostic_record("suspend audio drain error", ret);
+		error = ret;
 	ret = vitastream_screen_restore();
 	if (ret < 0)
 		diagnostic_record("suspend screen restore error", ret);
 
 	ret = ksceUdcdDeactivate();
-	if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT)
+	diagnostic_record("suspend deactivate result", ret);
+	if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT && !error)
 		error = ret;
-	if (ksceUdcdGetDrvState(UVC_DRIVER_NAME) == VITASTREAM_USB_DRIVER_STARTED) {
+	int driver_state = ksceUdcdGetDrvState(UVC_DRIVER_NAME);
+	diagnostic_record("suspend UVC driver before stop", driver_state);
+	if (driver_state == VITASTREAM_USB_DRIVER_STARTED) {
 		ret = ksceUdcdStop(UVC_DRIVER_NAME, 0, NULL);
+		diagnostic_record("suspend UVC stop result", ret);
 		if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT && !error)
 			error = ret;
 	}
+	driver_state = ksceUdcdGetDrvState(UVC_DRIVER_NAME);
+	diagnostic_record("suspend UVC driver after stop", driver_state);
+	if (driver_state == VITASTREAM_USB_DRIVER_STARTED && !error)
+		error = SCE_UDCD_ERROR_DRIVER_IN_PROGRESS;
 	ret = ksceUdcdStop("USBDeviceControllerDriver", 0, NULL);
+	diagnostic_record("suspend controller stop result", ret);
+#ifdef DIAGNOSTIC
+	diagnostic_record("suspend controller driver raw state",
+		ksceUdcdGetDrvState("USBDeviceControllerDriver"));
+#endif
 	if (ret < 0 && ret != SCE_UDCD_ERROR_INVALID_ARGUMENT && !error)
 		error = ret;
 
@@ -629,6 +644,7 @@ static int uvc_suspend_quiesce_device(void)
 	video_ret = uvc_video_release();
 	if (video_ret < 0)
 		video_ret = uvc_video_release();
+	diagnostic_record("suspend video release result", video_ret);
 	if (video_ret < 0 && !error)
 		error = video_ret;
 	uvc_recover_pending = 0;
@@ -697,6 +713,12 @@ static int uvc_suspend_system_event(int resume, int event, void *args, void *opt
 	(void)opt;
 	if (!uvc_thread_run)
 		return 0;
+	/* These callbacks can run after filesystem suspend. Only enqueue
+	 * immutable scalar records here; the video worker writes them later. */
+	if (event == UVC_SYS_EVENT_SUSPEND_BEGIN || event == UVC_SYS_EVENT_SUSPEND_ABORT ||
+	    event == 0x102 || event == 0x1000 || event == 0x400F || event == 0x1000F ||
+	    event == UVC_SYS_EVENT_RESUME_USB || event == UVC_SYS_EVENT_RESUME_FINAL)
+		video_diag_system_event(resume, event, atomic_load(&uvc_suspend_state));
 	if (event == UVC_SYS_EVENT_SUSPEND_ABORT ||
 	    (resume && event == UVC_SYS_EVENT_RESUME_FINAL)) {
 		uvc_suspend_request_resume();
@@ -1375,6 +1397,9 @@ static int uvc_thread(SceSize args, void *argp)
 			SCE_EVENT_WAITOR | SCE_EVENT_WAITCLEAR_PAT,
 			&out_bits, (SceUInt32[]){1000000});
 
+		/* Do not perform filesystem work in the quiesced power phases. */
+		if (atomic_load(&uvc_suspend_state) != UVC_SUSPEND_QUIESCED)
+			video_diag_flush();
 		if (!uvc_thread_run)
 			break;
 		if (uvc_suspend_worker()) {
@@ -1578,6 +1603,7 @@ static int uvc_suspend_init(void)
 	atomic_store(&g_suspend_handler_ready, 0);
 	g_suspend_handler_id = ksceKernelRegisterSysEventHandler(
 		"vitastream", uvc_system_event_bridge, NULL);
+	diagnostic_record("suspend diagnostic schema", 1);
 	return g_suspend_handler_id < 0 ? g_suspend_handler_id : 0;
 }
 

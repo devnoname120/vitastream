@@ -15,7 +15,7 @@ ifeq ($(DEBUG), 1)
 endif
 
 ifeq ($(DIAGNOSTIC), 1)
-	OBJS	+= src/diagnostic.o
+	OBJS	+= src/diagnostic.o src/video_diagnostic.o
 	CFLAGS	+= -DDIAGNOSTIC
 endif
 

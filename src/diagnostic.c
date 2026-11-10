@@ -4,6 +4,7 @@
 #include "diagnostic.h"
 
 #define DIAGNOSTIC_FILE "ux0:data/vitastream_diag.txt"
+#define DIAGNOSTIC_PREVIOUS_FILE "ux0:data/vitastream_diag.previous.txt"
 
 static void diagnostic_write(const char *buffer, unsigned int length, int flags)
 {
@@ -20,9 +21,19 @@ static void diagnostic_write(const char *buffer, unsigned int length, int flags)
 
 void diagnostic_reset(void)
 {
-	static const char header[] = "vitastream boot diagnostic\n";
+	static const char header[] = "vitastream boot diagnostic\nvideo diagnostic schema 0x00000001\n";
+	SceUID old = ksceIoOpen(DIAGNOSTIC_FILE, SCE_O_RDONLY, 0);
+	int flags = SCE_O_APPEND;
+	if (old >= 0) {
+		ksceIoClose(old);
+		(void)ksceIoRemove(DIAGNOSTIC_PREVIOUS_FILE);
+		/* A reboot must not silently truncate the failed boot's evidence.
+		 * If rotation fails, append a new boot header to the retained file. */
+		if (ksceIoRename(DIAGNOSTIC_FILE, DIAGNOSTIC_PREVIOUS_FILE) >= 0)
+			flags = SCE_O_TRUNC;
+	}
 
-	diagnostic_write(header, sizeof(header) - 1, SCE_O_TRUNC);
+	diagnostic_write(header, sizeof(header) - 1, flags);
 }
 
 void diagnostic_record(const char *stage, int result)

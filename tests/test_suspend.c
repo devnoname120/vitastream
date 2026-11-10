@@ -5,12 +5,14 @@
 #include <string.h>
 
 #include "../include/usb_state.h"
+#include "../include/video_diagnostic.h"
 
 #define UVC_DRIVER_NAME "vitastream"
 #define SCE_EVENT_WAITOR 1u
 #define SCE_EVENT_WAITCLEAR_PAT 2u
 #define SCE_KERNEL_ERROR_WAIT_TIMEOUT ((int)0x80028005)
-#define SCE_UDCD_ERROR_INVALID_ARGUMENT ((int)0x80243001)
+#define SCE_UDCD_ERROR_INVALID_ARGUMENT ((int)0x80243002)
+#define SCE_UDCD_ERROR_DRIVER_IN_PROGRESS ((int)0x80243006)
 typedef int32_t SceUID;
 typedef uint32_t SceUInt32;
 typedef int (*SceSysEventHandler)(int, int, void *, void *);
@@ -25,6 +27,7 @@ static struct {
 	int audio_error, release_errors, screen_error, deactivate_error;
 	int stop_uvc_error, stop_controller_error, start_error, wait_error;
 	int register_error, unregister_error, registrations, unregisters;
+	int keep_uvc_started;
 	unsigned int event_bits;
 	void (*on_wait)(void);
 } mock;
@@ -95,7 +98,8 @@ static int ksceUdcdStop(const char *name, int size, void *args)
 	assert(size == 0 && args == NULL);
 	if (!strcmp(name, UVC_DRIVER_NAME)) {
 		mock.stop_uvc++;
-		if (!mock.stop_uvc_error) mock.uvc_state = VITASTREAM_USB_DRIVER_REGISTERED;
+		if (!mock.stop_uvc_error && !mock.keep_uvc_started)
+			mock.uvc_state = VITASTREAM_USB_DRIVER_REGISTERED;
 		return mock.stop_uvc_error;
 	}
 	assert(!strcmp(name, "USBDeviceControllerDriver"));
@@ -232,8 +236,15 @@ int main(void)
 	assert(uvc_suspend_worker() == 0 && mock.deactivates == 1 && mock.starts == 1);
 
 	reset(); mock.audio_error = -71; mock.release_errors = 1; mock.on_wait = run_worker;
-	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == 0);
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == -71);
 	assert(mock.releases == 2 && mock.deactivates == 1 && mock.stop_controller == 1);
+	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_RESUME);
+
+	/* A successful Stop return does not excuse a still-started custom driver. */
+	reset(); mock.keep_uvc_started = 1; mock.on_wait = run_worker;
+	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) ==
+		SCE_UDCD_ERROR_DRIVER_IN_PROGRESS);
+	assert(atomic_load(&uvc_suspend_state) == UVC_SUSPEND_RESUME);
 
 	reset(); mock.stop_controller_error = -73; mock.on_wait = run_worker;
 	assert(uvc_suspend_system_event(0, UVC_SYS_EVENT_SUSPEND_BEGIN, NULL, NULL) == -73);

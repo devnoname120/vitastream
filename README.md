@@ -1,3 +1,18 @@
+# Issue #9 allocation comparison — 2026-11-11
+
+[Download the allocation comparison ZIP](vitastream-issue-9-allocation-comparison-2026-11-11.zip).
+Streams the negotiated video mode while reserving a 1352 KiB owned buffer.
+The requested test is 480×272/30 video-only on the reported 3.65 setup, allowing
+allocation size to be compared independently of resolution and USB traffic.
+The diagnostic uses baseline `70c77f5` plus the November 10 logging changes.
+Full corresponding source, patches, checksums and host/target validation are
+included. Hardware results are pending. [ZIP checksum](SHA256SUMS-issue-9-allocation-2026-11-11).
+
+For issue #12 EQVita testing, use the November 10 diagnostic below with its
+normal allocation sizes. This allocation comparison belongs to issue #9.
+
+---
+
 # Issue #11 corrected power-phase test — 2026-11-10
 
 [Download the corrected power-phase test ZIP](vitastream-issue-11-power-phase-test-2026-11-10.zip).

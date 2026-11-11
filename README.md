@@ -1,3 +1,15 @@
+# Issue #11 suspend timing diagnostic — 2026-11-11
+
+[Download the timing diagnostic ZIP](vitastream-issue-11-timing-test-2026-11-11.zip).
+Adds pre-suspend/final-resume RTC ticks and the raw native wake factor to the
+corrected `cc7b84a` candidate. Schema 3. The normal build is byte-identical to
+that candidate. One timed sleep/wake cycle in LiveArea is requested to resolve
+the remaining interval ambiguity. Complete source, patch, checksums and host,
+target and offline firmware checks are included. Hardware results are pending.
+[ZIP checksum](SHA256SUMS-issue-11-timing-2026-11-11).
+
+---
+
 # Issue #9 allocation comparison — 2026-11-11
 
 [Download the allocation comparison ZIP](vitastream-issue-9-allocation-comparison-2026-11-11.zip).

@@ -1,11 +1,14 @@
 # Issue #8 scoped USB descriptor test — 2026-11-12
 
-[Download the descriptor test ZIP](vitastream-issue-8-descriptor-scope-test-2026-11-12.zip).
-Scopes IAD insertion to VitaStream's retained descriptor metadata and reserves
-the IAD bytes before native cache allocation. Includes both normal and diagnostic
-plugins, full source, patches and validation receipts. Host tests, target builds
-and 31 available firmware checks pass. The SELECT reboot still awaits hardware
-confirmation with this candidate. [ZIP checksum](SHA256SUMS-issue-8-descriptor-scope-2026-11-12).
+[Download the verified descriptor test ZIP](vitastream-issue-8-descriptor-scope-test-2026-11-12.zip).
+Scopes IAD insertion using ownership metadata retained by native descriptor
+clones, and reserves the IAD bytes before native cache allocation. Includes
+normal/diagnostic plugins, full source, patches and validation receipts.
+Host tests, target builds and 31 available firmware checks pass. Hardware
+confirmation of the reported SELECT reboot is pending. [ZIP checksum](SHA256SUMS-issue-8-descriptor-scope-2026-11-12).
+
+This archive supersedes the initial November 12 draft at `9a2da7a`, which
+predated the final descriptor-cache reservation fix.
 
 ---
 

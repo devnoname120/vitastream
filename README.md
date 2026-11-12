@@ -1,3 +1,14 @@
+# Issue #8 scoped USB descriptor test — 2026-11-12
+
+[Download the descriptor test ZIP](vitastream-issue-8-descriptor-scope-test-2026-11-12.zip).
+Scopes IAD insertion to VitaStream's retained descriptor metadata and reserves
+the IAD bytes before native cache allocation. Includes both normal and diagnostic
+plugins, full source, patches and validation receipts. Host tests, target builds
+and 31 available firmware checks pass. The SELECT reboot still awaits hardware
+confirmation with this candidate. [ZIP checksum](SHA256SUMS-issue-8-descriptor-scope-2026-11-12).
+
+---
+
 # Issue #11 suspend timing diagnostic — 2026-11-11
 
 [Download the timing diagnostic ZIP](vitastream-issue-11-timing-test-2026-11-11.zip).

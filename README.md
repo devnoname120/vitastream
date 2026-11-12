@@ -7,8 +7,8 @@ normal/diagnostic plugins, full source, patches and validation receipts.
 Host tests, target builds and 31 available firmware checks pass. Hardware
 confirmation of the reported SELECT reboot is pending. [ZIP checksum](SHA256SUMS-issue-8-descriptor-scope-2026-11-12).
 
-This archive supersedes the initial November 12 draft at `9a2da7a`, which
-predated the final descriptor-cache reservation fix.
+The initial November 12 archive and this repackaged archive contain identical
+verified source and plugin binaries. Their archive checksums differ.
 
 ---
 

@@ -1,3 +1,14 @@
+# Issue #8 handoff tracing diagnostic — 2026-11-12
+
+[Download the handoff tracing diagnostic](vitastream-issue-8-handoff-trace-2026-11-12.zip).
+The SELECT failure persisted with the descriptor candidate. This diagnostic
+adds queued caller/stage records and worker before/after checkpoints. The
+normal binary is byte-identical to the descriptor candidate. Full source,
+patches, checksums and host/target validation are included. Hardware results
+are pending. [ZIP checksum](SHA256SUMS-issue-8-handoff-trace-2026-11-12).
+
+---
+
 # Issue #8 scoped USB descriptor test — 2026-11-12
 
 [Download the verified descriptor test ZIP](vitastream-issue-8-descriptor-scope-test-2026-11-12.zip).

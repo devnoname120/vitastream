@@ -1,3 +1,15 @@
+# Issue #8 early VitaShell handoff candidate — 2026-11-12
+
+[Download the early-handoff test ZIP](vitastream-issue-8-early-handoff-2026-11-12.zip).
+Begins capture quiescence before VitaShellUsbDevice stops the active controller,
+using its caller text range to scope the interception. Existing MtpIf handling
+retains restoration. Diagnostic logs move to internal ur0 storage. Includes
+normal/diagnostic builds, complete source, patches and validation receipts.
+Host tests, target builds and 31 available firmware checks pass. Hardware
+confirmation is pending. [ZIP checksum](SHA256SUMS-issue-8-early-handoff-2026-11-12).
+
+---
+
 # Issue #8 handoff tracing diagnostic — 2026-11-12
 
 [Download the handoff tracing diagnostic](vitastream-issue-8-handoff-trace-2026-11-12.zip).

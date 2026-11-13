@@ -1,3 +1,13 @@
+## VitaShell MTP import-hook candidate — 2026-11-13
+
+[Download normal and diagnostic builds](vitastream-issue-8-mtp-import-test-2026-11-13.zip).
+
+Avoids a reproduced Thumb BLX relocation defect in taiHEN's bundled substitute source by hooking ARM imports inside SceMtpIfDriver. Validated kind=1 wrapper callsites and the VITASHELL title preserve narrow handoff scope. Includes the earlier descriptor correction and early VitaShellUsbDevice handoff.
+
+Full sanitizer suite, normal/diagnostic builds and 31 available offline firmware/hardware pairs pass, including exact wrapper/ARM import call relationships. Five firmware cells remain unavailable. **Reporter hardware confirmation is pending; this is a test candidate.** No release or source merge to main. Source, patch chain, proof harness/trace, logs and checksums are included.
+
+ZIP SHA-256: `d28b0a5029908566f8dd96550325974aecbd3e6585989bd07a3423aa8532d4fa`.
+
 # Issue #8 early VitaShell handoff candidate — 2026-11-12
 
 [Download the early-handoff test ZIP](vitastream-issue-8-early-handoff-2026-11-12.zip).
